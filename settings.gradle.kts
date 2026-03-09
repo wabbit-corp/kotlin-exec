@@ -32,3 +32,8 @@ pluginManagement {
         id("net.minecrell.plugin-yml.bukkit") version "0.6.0"
     }
 }
+
+val localSettingsFile = file("settings.local.gradle.kts")
+if (localSettingsFile.isFile) {
+    apply(from = localSettingsFile)
+}
