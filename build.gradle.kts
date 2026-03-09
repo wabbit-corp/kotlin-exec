@@ -3,6 +3,8 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 repositories {
     mavenCentral()
+
+    maven("https://jitpack.io")
 }
 
 group   = "one.wabbit"
@@ -28,7 +30,7 @@ publishing {
 }
 
 dependencies {
-    implementation(project(":kotlin-throwable-policy")) // 0.0.1
+    implementation("one.wabbit:kotlin-throwable-policy:0.0.1")
 
     testImplementation(kotlin("test"))
 
