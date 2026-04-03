@@ -1,3 +1,5 @@
+@file:OptIn(PlatformSpecificExecApi::class)
+
 package one.wabbit.exec
 
 import one.wabbit.throwables.Throwables
@@ -14,17 +16,18 @@ import kotlin.time.Duration
 
 class RunningProcessImpl internal constructor(
     val meta: ExecResult.Meta,
-    val process: Process,
+    private val process: Process,
     private val kill: KillSwitch,
-): RunningProcess {
+): JvmRunningProcess {
     override val pid: Long? get() = meta.pid
+    override val rawProcess: Process get() = process
 
     override fun isAlive(): Boolean = process.isAlive
 
     override fun exitCodeOrNull(): ExitCode? =
         if (process.isAlive) null else exitValueOrNull(process)?.let { ExitCode(it) }
 
-    /** Kill the process tree using the configured [SpawnSpec.shutdown]. Idempotent. */
+    /** Kill the process tree using the configured [JvmSpawnSpec.shutdown]. Idempotent. */
     override fun killTree() {
         kill.killOnce()
     }
@@ -83,7 +86,7 @@ class RunningProcessImpl internal constructor(
 }
 
 @Throws(ExecException::class)
-internal fun spawnBlockingInternal(spec: SpawnSpec): RunningProcessImpl {
+internal fun spawnBlockingInternal(spec: JvmSpawnSpec): RunningProcessImpl {
     val baseMeta = ExecResult.Meta(argv = spec.argv, pid = null)
     validateSpawnSpecOrThrow(spec)
 
@@ -104,17 +107,17 @@ internal fun spawnBlockingInternal(spec: SpawnSpec): RunningProcessImpl {
         }
 
     val meta = baseMeta.copy(pid = pidOrNull(proc))
-    val kill = KillSwitch(proc, closeStdinOnKill = spec.stdin != SpawnSpec.Input.Inherit, shutdown = spec.shutdown)
+    val kill = KillSwitch(proc, closeStdinOnKill = spec.stdin != JvmSpawnSpec.Input.Inherit, shutdown = spec.shutdown)
 
     // If we didn't inherit stdin, close it immediately to avoid children hanging on stdin reads.
-    if (spec.stdin == SpawnSpec.Input.None) closeQuietly(proc.outputStream)
+    if (spec.stdin == JvmSpawnSpec.Input.None) closeQuietly(proc.outputStream)
 
     return RunningProcessImpl(meta = meta, process = proc, kill = kill)
 }
 
 @Throws(ExecException::class)
 internal suspend fun spawnInternal(
-    spec: SpawnSpec,
+    spec: JvmSpawnSpec,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ): RunningProcessImpl {
     val baseMeta = ExecResult.Meta(argv = spec.argv, pid = null)
@@ -158,10 +161,10 @@ internal suspend fun spawnInternal(
         }
 
     val meta = baseMeta.copy(pid = pidOrNull(proc))
-    val kill = KillSwitch(proc, closeStdinOnKill = spec.stdin != SpawnSpec.Input.Inherit, shutdown = spec.shutdown)
+    val kill = KillSwitch(proc, closeStdinOnKill = spec.stdin != JvmSpawnSpec.Input.Inherit, shutdown = spec.shutdown)
 
     try {
-        if (spec.stdin == SpawnSpec.Input.None) closeQuietly(proc.outputStream)
+        if (spec.stdin == JvmSpawnSpec.Input.None) closeQuietly(proc.outputStream)
         // If caller cancels mid-spawn, don't leak an orphaned process.
         currentCoroutineContext().ensureActive()
         return RunningProcessImpl(meta = meta, process = proc, kill = kill)
@@ -171,7 +174,7 @@ internal suspend fun spawnInternal(
     }
 }
 
-internal fun validateSpawnSpecOrThrow(spec: SpawnSpec) {
+internal fun validateSpawnSpecOrThrow(spec: JvmSpawnSpec) {
     require(spec.argv.isNotEmpty()) { "argv must not be empty" }
     when (val s = spec.shutdown) {
         is ShutdownPolicy.KillTree -> {}
@@ -182,22 +185,22 @@ internal fun validateSpawnSpecOrThrow(spec: SpawnSpec) {
     }
 }
 
-internal fun buildProcessBuilder(spec: SpawnSpec): ProcessBuilder {
+internal fun buildProcessBuilder(spec: JvmSpawnSpec): ProcessBuilder {
     val pb = ProcessBuilder(spec.argv)
     spec.cwd?.let { pb.directory(fileOf(it)) }
     applyEnv(pb, spec.env)
 
     // stdin
     when (spec.stdin) {
-        SpawnSpec.Input.Inherit -> pb.redirectInput(ProcessBuilder.Redirect.INHERIT)
-        SpawnSpec.Input.None -> pb.redirectInput(ProcessBuilder.Redirect.PIPE)
+        JvmSpawnSpec.Input.Inherit -> pb.redirectInput(ProcessBuilder.Redirect.INHERIT)
+        JvmSpawnSpec.Input.None -> pb.redirectInput(ProcessBuilder.Redirect.PIPE)
     }
 
     // stdout
     when (val o = spec.stdout) {
-        SpawnSpec.StdoutSpec.Inherit -> pb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
-        SpawnSpec.StdoutSpec.Discard -> pb.redirectOutput(ProcessBuilder.Redirect.DISCARD)
-        is SpawnSpec.StdoutSpec.File -> {
+        JvmSpawnSpec.StdoutSpec.Inherit -> pb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
+        JvmSpawnSpec.StdoutSpec.Discard -> pb.redirectOutput(ProcessBuilder.Redirect.DISCARD)
+        is JvmSpawnSpec.StdoutSpec.File -> {
             val f = fileOf(o.path)
             pb.redirectOutput(if (o.append) ProcessBuilder.Redirect.appendTo(f) else ProcessBuilder.Redirect.to(f))
         }
@@ -205,21 +208,21 @@ internal fun buildProcessBuilder(spec: SpawnSpec): ProcessBuilder {
 
     // stderr / merge
     when (val e = spec.stderr) {
-        SpawnSpec.StderrSpec.ToStdout -> {
+        JvmSpawnSpec.StderrSpec.ToStdout -> {
             pb.redirectErrorStream(true)
         }
 
-        SpawnSpec.StderrSpec.Inherit -> {
+        JvmSpawnSpec.StderrSpec.Inherit -> {
             pb.redirectErrorStream(false)
             pb.redirectError(ProcessBuilder.Redirect.INHERIT)
         }
 
-        SpawnSpec.StderrSpec.Discard -> {
+        JvmSpawnSpec.StderrSpec.Discard -> {
             pb.redirectErrorStream(false)
             pb.redirectError(ProcessBuilder.Redirect.DISCARD)
         }
 
-        is SpawnSpec.StderrSpec.File -> {
+        is JvmSpawnSpec.StderrSpec.File -> {
             pb.redirectErrorStream(false)
             val f = fileOf(e.path)
             pb.redirectError(if (e.append) ProcessBuilder.Redirect.appendTo(f) else ProcessBuilder.Redirect.to(f))

@@ -1,9 +1,14 @@
+@file:OptIn(PlatformSpecificExecApi::class)
+
 package one.wabbit.exec
 
 import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
+import kotlinx.io.Sink as KxSink
+import kotlinx.io.asOutputStream
+import kotlinx.io.write
 import one.wabbit.throwables.Throwables
 
 internal data class SinkFinished(
@@ -19,17 +24,19 @@ internal sealed interface Sink {
 }
 
 /** Build a sink instance for a given SinkSpec. */
-internal fun sinkFor(spec: ExecSpec.SinkSpec, meta: ExecResult.Meta, stream: StreamId): Sink =
+internal fun sinkFor(spec: JvmExecSpec.SinkSpec, meta: ExecResult.Meta, stream: StreamId): Sink =
     when (spec) {
-        is ExecSpec.SinkSpec.Capture ->
+        is JvmExecSpec.SinkSpec.Capture ->
             when (spec.keep) {
                 ExecSpec.Keep.Head -> HeadCaptureSink(meta, stream, spec.maxBytes, spec.overflow)
                 ExecSpec.Keep.Tail -> TailCaptureSink(meta, stream, spec.maxBytes, spec.overflow)
             }
-        is ExecSpec.SinkSpec.Stream ->
+        is JvmExecSpec.SinkSpec.Stream ->
             StreamSink(meta, stream, spec.onChunk, spec.copyChunks, spec.maxBytes, spec.overflow)
-        is ExecSpec.SinkSpec.File -> FileSink(meta, stream, spec.path, spec.write, spec.maxBytes, spec.overflow)
-        is ExecSpec.SinkSpec.Tee -> TeeSink(
+        is JvmExecSpec.SinkSpec.WriteTo ->
+            WriteToSink(meta, stream, spec.open, spec.maxBytes, spec.overflow)
+        is JvmExecSpec.SinkSpec.File -> FileSink(meta, stream, spec.path, spec.write, spec.maxBytes, spec.overflow)
+        is JvmExecSpec.SinkSpec.Tee -> TeeSink(
             primary = sinkFor(spec.primary, meta, stream),
             branches = spec.branches.map { sinkFor(it, meta, stream) }
         )
@@ -196,6 +203,131 @@ internal class StreamSink(
             captured = null,
             stats = ExecResult.OutputStats(bytesRead = bytesRead, truncated = truncated)
         )
+    }
+}
+
+internal class WriteToSink(
+    private val meta: ExecResult.Meta,
+    private val stream: StreamId,
+    private val open: () -> KxSink,
+    private val maxBytes: Int?,
+    private val overflow: ExecSpec.OverflowPolicy,
+) : Sink {
+    private var bytesRead: Long = 0
+    private var bytesWritten: Long = 0
+    private var truncated: Boolean = false
+    private var overflowSignaled: Boolean = false
+    private var sink: KxSink? = null
+
+    private fun openIfNeeded(): KxSink {
+        val existing = sink
+        if (existing != null) return existing
+        val created = open()
+        sink = created
+        return created
+    }
+
+    override fun offer(buf: ByteArray, off: Int, len: Int): ExecError? {
+        bytesRead += len.toLong()
+
+        if (maxBytes != null && bytesWritten >= maxBytes.toLong()) {
+            truncated = true
+            if (!overflowSignaled && overflow == ExecSpec.OverflowPolicy.KillProcess && bytesRead > maxBytes.toLong()) {
+                overflowSignaled = true
+                return ExecError.OutputLimitExceeded(
+                    meta = meta,
+                    stream = stream,
+                    limitBytes = maxBytes,
+                    observedBytes = bytesRead,
+                )
+            }
+            return null
+        }
+
+        val toWrite =
+            if (maxBytes == null) {
+                len
+            } else {
+                val remaining = (maxBytes.toLong() - bytesWritten).coerceAtLeast(0L)
+                minOf(len.toLong(), remaining).toInt()
+            }
+
+        return try {
+            if (toWrite > 0) {
+                openIfNeeded().write(buf, off, off + toWrite)
+                bytesWritten += toWrite.toLong()
+            }
+            if (toWrite < len) truncated = true
+
+            if (maxBytes != null && !overflowSignaled && overflow == ExecSpec.OverflowPolicy.KillProcess && bytesRead > maxBytes.toLong()) {
+                overflowSignaled = true
+                return ExecError.OutputLimitExceeded(
+                    meta = meta,
+                    stream = stream,
+                    limitBytes = maxBytes,
+                    observedBytes = bytesRead,
+                )
+            }
+            null
+        } catch (t: Throwable) {
+            Throwables.propagateIfNeeded(t, WORKER_THROWABLE_POLICY)
+            ExecError.OutputSinkFailed(meta = meta, stream = stream, cause = t)
+        }
+    }
+
+    override fun finish(): SinkFinished {
+        val closeErr = closeForFinish()
+        return SinkFinished(
+            captured = null,
+            stats = ExecResult.OutputStats(
+                bytesRead = bytesRead,
+                truncated = truncated || (maxBytes != null && bytesRead > maxBytes.toLong()),
+            ),
+            error = closeErr,
+        )
+    }
+
+    private fun closeForFinish(): ExecError? {
+        val current = sink
+        sink = null
+        if (current == null) return null
+
+        var first: Throwable? = null
+        try {
+            current.flush()
+        } catch (t: Throwable) {
+            first = t
+        }
+        try {
+            current.close()
+        } catch (t: Throwable) {
+            if (first == null) first = t else Throwables.addSuppressedBestEffort(first, t)
+        }
+
+        if (first != null) {
+            Throwables.propagateIfNeeded(first)
+            return ExecError.OutputSinkFailed(meta = meta, stream = stream, cause = first)
+        }
+        return null
+    }
+
+    override fun close() {
+        val current = sink
+        sink = null
+        if (current != null) {
+            try {
+                current.flush()
+            } catch (t: Throwable) {
+                restoreInterruptFlagIfNeeded(t)
+                Throwables.propagateFatalPlatformErrorsIfNeeded(t)
+            }
+            try {
+                current.close()
+            } catch (t: Throwable) {
+                restoreInterruptFlagIfNeeded(t)
+                Throwables.propagateFatalPlatformErrorsIfNeeded(t)
+            }
+        }
     }
 }
 

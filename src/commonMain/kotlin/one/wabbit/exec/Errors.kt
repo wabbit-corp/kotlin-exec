@@ -38,7 +38,6 @@ sealed interface ExecError {
         override val phase: Phase = Phase.Spawn
     }
 
-    /** Caller-provided stdin writer threw. */
     data class InputProviderFailed(
         override val meta: ExecResult.Meta,
         override val cause: Throwable,
@@ -57,7 +56,6 @@ sealed interface ExecError {
         override val phase: Phase = Phase.WriteStdin
     }
 
-    /** Output callback threw. */
     data class OutputConsumerFailed(
         override val meta: ExecResult.Meta,
         val stream: StreamId,
@@ -73,7 +71,6 @@ sealed interface ExecError {
             }
     }
 
-    /** Internal sink failed (e.g., file write). */
     data class OutputSinkFailed(
         override val meta: ExecResult.Meta,
         val stream: StreamId,
@@ -109,8 +106,7 @@ sealed interface ExecError {
         val stream: StreamId,
         val limitBytes: Int,
         val observedBytes: Long,
-        override val message: String =
-            "$stream exceeded output limit ($observedBytes > $limitBytes bytes)",
+        override val message: String = "$stream exceeded output limit ($observedBytes > $limitBytes bytes)",
         override val captures: ExecResult.Captures? = null,
     ) : ExecError {
         override val phase: Phase =
@@ -179,7 +175,6 @@ sealed interface ExecError {
         override val phase: Phase = Phase.AwaitExit
         override val cause: Throwable? = null
 
-        /** Common Unix convention: 128+signal. Not guaranteed. */
         val maybeSignal: Int? = exitCode.takeIf { it in 128..255 }?.minus(128)
     }
 

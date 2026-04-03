@@ -1,8 +1,9 @@
+@file:OptIn(PlatformSpecificExecApi::class)
+
 package one.wabbit.exec
 
 import one.wabbit.throwables.Throwables
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
 import java.io.Closeable
 import java.io.File
 import java.util.Locale
@@ -20,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.time.Duration
+import kotlinx.io.files.Path as KxPath
 
 /**
  * Policy for worker threads (IO pump threads, Dispatchers.IO, virtual threads, etc).
@@ -184,31 +186,33 @@ internal fun applyEnv(pb: ProcessBuilder, policy: EnvPolicy) {
  * A sink can be specialized to a ProcessBuilder redirect only when it is a simple unbounded file sink.
  * If it has a maxBytes bound we must pump through FileSink to enforce disk safety.
  */
-internal fun isSpecializableRedirect(sink: ExecSpec.SinkSpec): Boolean =
-    sink is ExecSpec.SinkSpec.File &&
+internal fun isSpecializableRedirect(sink: JvmExecSpec.SinkSpec): Boolean =
+    sink is JvmExecSpec.SinkSpec.File &&
         sink.maxBytes == null &&
         sink.write.eager
 
-internal fun stdoutNeedsPipe(stdout: ExecSpec.StdoutSpec): Boolean =
+internal fun stdoutNeedsPipe(stdout: JvmExecSpec.StdoutSpec): Boolean =
     when (stdout) {
-        ExecSpec.StdoutSpec.Inherit, ExecSpec.StdoutSpec.Discard -> false
-        is ExecSpec.StdoutSpec.Pipe -> !isSpecializableRedirect(stdout.sink)
+        JvmExecSpec.StdoutSpec.Inherit, JvmExecSpec.StdoutSpec.Discard -> false
+        is JvmExecSpec.StdoutSpec.Pipe -> !isSpecializableRedirect(stdout.sink)
     }
 
-internal fun stderrNeedsPipe(stderr: ExecSpec.StderrSpec): Boolean =
+internal fun stderrNeedsPipe(stderr: JvmExecSpec.StderrSpec): Boolean =
     when (stderr) {
-        ExecSpec.StderrSpec.Inherit, ExecSpec.StderrSpec.Discard, ExecSpec.StderrSpec.ToStdout -> false
-        is ExecSpec.StderrSpec.Pipe -> !isSpecializableRedirect(stderr.sink)
+        JvmExecSpec.StderrSpec.Inherit,
+        JvmExecSpec.StderrSpec.Discard,
+        JvmExecSpec.StderrSpec.ToStdout -> false
+        is JvmExecSpec.StderrSpec.Pipe -> !isSpecializableRedirect(stderr.sink)
     }
 
-internal fun stdinNeedsTask(stdin: ExecSpec.Input): Boolean =
+internal fun stdinNeedsTask(stdin: JvmExecSpec.Input): Boolean =
     when (stdin) {
-        ExecSpec.Input.None, ExecSpec.Input.Inherit -> false
+        JvmExecSpec.Input.None, JvmExecSpec.Input.Inherit -> false
         else -> true
     }
 
 /** Best-effort required parallelism for I/O pump tasks (stdout/stderr/stdin). */
-internal fun requiredIoParallelism(spec: ExecSpec): Int =
+internal fun requiredIoParallelism(spec: JvmExecSpec): Int =
     (if (stdoutNeedsPipe(spec.stdout)) 1 else 0) +
         (if (stderrNeedsPipe(spec.stderr)) 1 else 0) +
         (if (stdinNeedsTask(spec.stdin)) 1 else 0)
@@ -256,6 +260,7 @@ internal fun closeQuietly(vararg c: Any?) {
         try {
             when (x) {
                 is Closeable -> x.close()
+                is AutoCloseable -> x.close()
                 is java.io.InputStream -> x.close()
                 is java.io.OutputStream -> x.close()
             }
@@ -280,6 +285,7 @@ internal fun closeQuietlyWorker(vararg c: Any?) {
         try {
             when (x) {
                 is Closeable -> x.close()
+                is AutoCloseable -> x.close()
                 is java.io.InputStream -> x.close()
                 is java.io.OutputStream -> x.close()
             }
@@ -414,6 +420,8 @@ internal fun joinAllWithin(threads: List<Thread>, cleanup: Deadline): Boolean {
 }
 
 internal fun fileOf(path: java.nio.file.Path): File = path.toFile()
+
+internal fun nioPathOf(path: KxPath): java.nio.file.Path = java.nio.file.Path.of(path.toString())
 
 internal class KillSwitch(
     private val proc: Process,

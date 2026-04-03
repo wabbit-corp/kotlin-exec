@@ -1,4 +1,4 @@
-@file:OptIn(InternalCoroutinesApi::class)
+@file:OptIn(PlatformSpecificExecApi::class, InternalCoroutinesApi::class)
 
 package one.wabbit.exec
 
@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 @Throws(ExecException::class)
 suspend fun execInternal(
-    spec: ExecSpec,
+    spec: JvmExecSpec,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ): ExecResult = coroutineScope {
     val startNanos = System.nanoTime()
@@ -64,7 +64,7 @@ suspend fun execInternal(
         }
 
     val meta = baseMeta.copy(pid = pidOrNull(proc))
-    val kill = KillSwitch(proc, closeStdinOnKill = spec.stdin !is ExecSpec.Input.Inherit, shutdown = spec.shutdown)
+    val kill = KillSwitch(proc, closeStdinOnKill = spec.stdin !is JvmExecSpec.Input.Inherit, shutdown = spec.shutdown)
 
     // Second guard: cancellation in the tiny window between returning from withContext and installing hooks.
     try {
@@ -83,7 +83,7 @@ suspend fun execInternal(
     // Setup sinks. Sink creation can throw (e.g. eager File sinks).
     var stdoutSink: Sink? = null
     var stderrSink: Sink? = null
-    (spec.stdout as? ExecSpec.StdoutSpec.Pipe)
+    (spec.stdout as? JvmExecSpec.StdoutSpec.Pipe)
         ?.takeIf { stdoutNeedsPipe(spec.stdout) }
         ?.let { pipe ->
             try {
@@ -99,7 +99,7 @@ suspend fun execInternal(
                 throw ExecException(ExecError.OutputSinkFailed(meta = meta, stream = StreamId.STDOUT, cause = t))
             }
         }
-    (spec.stderr as? ExecSpec.StderrSpec.Pipe)
+    (spec.stderr as? JvmExecSpec.StderrSpec.Pipe)
         ?.takeIf { stderrNeedsPipe(spec.stderr) }
         ?.let { pipe ->
             try {
@@ -133,8 +133,8 @@ suspend fun execInternal(
         } else null
 
     when (spec.stdin) {
-        ExecSpec.Input.None -> closeQuietly(proc.outputStream)
-        ExecSpec.Input.Inherit -> {}
+        JvmExecSpec.Input.None -> closeQuietly(proc.outputStream)
+        JvmExecSpec.Input.Inherit -> {}
         else -> {}
     }
 
@@ -353,7 +353,7 @@ private fun pumpStreamOutcome(
 
 private fun writeStdinOutcome(
     proc: Process,
-    stdin: ExecSpec.Input,
+    stdin: JvmExecSpec.Input,
     meta: ExecResult.Meta,
     kill: KillSwitch,
 ): ExecError? =

@@ -1,3 +1,5 @@
+@file:OptIn(PlatformSpecificExecApi::class)
+
 package one.wabbit.exec
 
 import one.wabbit.throwables.Throwables
@@ -11,9 +13,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.io.asInputStream
 
 @Throws(ExecException::class)
-internal fun execBlockingInternal(spec: ExecSpec, virtualThreads: VirtualThreadsPolicy = VirtualThreadsPolicy.Prefer): ExecResult {
+internal fun execBlockingInternal(spec: JvmExecSpec, virtualThreads: VirtualThreadsPolicy = VirtualThreadsPolicy.Prefer): ExecResult {
     fun runWith(es: ExecutorService?): ExecResult =
         try {
             execBlockingInternalWithExecutor(spec, taskExecutor = es)
@@ -29,7 +32,7 @@ internal fun execBlockingInternal(spec: ExecSpec, virtualThreads: VirtualThreads
 }
 
 @Throws(ExecException::class)
-internal fun execBlockingInternalWithExecutor(spec: ExecSpec, taskExecutor: Executor?): ExecResult {
+internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: Executor?): ExecResult {
     val startNanos = System.nanoTime()
     val baseMeta = ExecResult.Meta(argv = spec.argv, pid = null)
 
@@ -56,13 +59,13 @@ internal fun execBlockingInternalWithExecutor(spec: ExecSpec, taskExecutor: Exec
     }
 
     val meta = baseMeta.copy(pid = pidOrNull(proc))
-    val kill = KillSwitch(proc, closeStdinOnKill = spec.stdin !is ExecSpec.Input.Inherit, shutdown = spec.shutdown)
+    val kill = KillSwitch(proc, closeStdinOnKill = spec.stdin !is JvmExecSpec.Input.Inherit, shutdown = spec.shutdown)
 
     // Create sinks for piped streams. Sink creation can now throw (e.g. eager File sinks).
     var stdoutSink: Sink? = null
     var stderrSink: Sink? = null
     // stdout sink
-    (spec.stdout as? ExecSpec.StdoutSpec.Pipe)
+    (spec.stdout as? JvmExecSpec.StdoutSpec.Pipe)
         ?.takeIf { stdoutNeedsPipe(spec.stdout) }
         ?.let { pipe ->
             try {
@@ -76,7 +79,7 @@ internal fun execBlockingInternalWithExecutor(spec: ExecSpec, taskExecutor: Exec
             }
         }
     // stderr sink
-    (spec.stderr as? ExecSpec.StderrSpec.Pipe)
+    (spec.stderr as? JvmExecSpec.StderrSpec.Pipe)
         ?.takeIf { stderrNeedsPipe(spec.stderr) }
         ?.let { pipe ->
             try {
@@ -121,11 +124,11 @@ internal fun execBlockingInternalWithExecutor(spec: ExecSpec, taskExecutor: Exec
         }
 
         when (spec.stdin) {
-            ExecSpec.Input.None -> {
+            JvmExecSpec.Input.None -> {
                 closeQuietly(proc.outputStream)
             }
 
-            ExecSpec.Input.Inherit -> {
+            JvmExecSpec.Input.Inherit -> {
                 // ProcessBuilder.Redirect.INHERIT handles it. Do nothing, do not close outputStream.
             }
 
@@ -396,18 +399,21 @@ internal fun ExecError.copyWithCaptures(c: ExecResult.Captures): ExecError =
     }
 
 @Throws(IllegalArgumentException::class)
-internal fun validateSpecOrThrow(spec: ExecSpec, meta: ExecResult.Meta) {
+internal fun validateSpecOrThrow(spec: JvmExecSpec, meta: ExecResult.Meta) {
     require(spec.argv.isNotEmpty()) { "argv must not be empty" }
 
-    fun validateSink(s: ExecSpec.SinkSpec, label: String) {
+    fun validateSink(s: JvmExecSpec.SinkSpec, label: String) {
         when (s) {
-            is ExecSpec.SinkSpec.Capture -> require(s.maxBytes > 0) { "$label capture maxBytes must be > 0" }
-            is ExecSpec.SinkSpec.Stream -> s.maxBytes?.let { require(it > 0) { "$label stream maxBytes must be > 0" } }
-            is ExecSpec.SinkSpec.File -> {
+            is JvmExecSpec.SinkSpec.Capture -> require(s.maxBytes > 0) { "$label capture maxBytes must be > 0" }
+            is JvmExecSpec.SinkSpec.Stream -> s.maxBytes?.let { require(it > 0) { "$label stream maxBytes must be > 0" } }
+            is JvmExecSpec.SinkSpec.WriteTo -> {
+                s.maxBytes?.let { require(it > 0) { "$label writeTo maxBytes must be > 0" } }
+            }
+            is JvmExecSpec.SinkSpec.File -> {
                 s.maxBytes?.let { require(it > 0) { "$label file maxBytes must be > 0" } }
             }
 
-            is ExecSpec.SinkSpec.Tee -> {
+            is JvmExecSpec.SinkSpec.Tee -> {
                 validateSink(s.primary, label)
                 for (b in s.branches) validateSink(b, label)
             }
@@ -415,11 +421,11 @@ internal fun validateSpecOrThrow(spec: ExecSpec, meta: ExecResult.Meta) {
     }
 
     when (val o = spec.stdout) {
-        is ExecSpec.StdoutSpec.Pipe -> validateSink(o.sink, "stdout")
+        is JvmExecSpec.StdoutSpec.Pipe -> validateSink(o.sink, "stdout")
         else -> {}
     }
     when (val e = spec.stderr) {
-        is ExecSpec.StderrSpec.Pipe -> validateSink(e.sink, "stderr")
+        is JvmExecSpec.StderrSpec.Pipe -> validateSink(e.sink, "stderr")
         else -> {}
     }
 
@@ -441,14 +447,14 @@ internal fun validateSpecOrThrow(spec: ExecSpec, meta: ExecResult.Meta) {
     }
 }
 
-internal fun buildProcessBuilder(spec: ExecSpec): ProcessBuilder {
+internal fun buildProcessBuilder(spec: JvmExecSpec): ProcessBuilder {
     val pb = ProcessBuilder(spec.argv)
     spec.cwd?.let { pb.directory(fileOf(it)) }
     applyEnv(pb, spec.env)
 
     // stdin
     when (spec.stdin) {
-        is ExecSpec.Input.Inherit -> pb.redirectInput(ProcessBuilder.Redirect.INHERIT)
+        is JvmExecSpec.Input.Inherit -> pb.redirectInput(ProcessBuilder.Redirect.INHERIT)
         else -> pb.redirectInput(ProcessBuilder.Redirect.PIPE)
     }
 
@@ -457,7 +463,7 @@ internal fun buildProcessBuilder(spec: ExecSpec): ProcessBuilder {
 
     // stderr / merge
     when (val e = spec.stderr) {
-        ExecSpec.StderrSpec.ToStdout -> {
+        JvmExecSpec.StderrSpec.ToStdout -> {
             pb.redirectErrorStream(true)
         }
 
@@ -470,13 +476,13 @@ internal fun buildProcessBuilder(spec: ExecSpec): ProcessBuilder {
     return pb
 }
 
-private fun configureStdout(pb: ProcessBuilder, out: ExecSpec.StdoutSpec) {
+private fun configureStdout(pb: ProcessBuilder, out: JvmExecSpec.StdoutSpec) {
     when (out) {
-        ExecSpec.StdoutSpec.Inherit -> pb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
-        ExecSpec.StdoutSpec.Discard -> pb.redirectOutput(ProcessBuilder.Redirect.DISCARD)
-        is ExecSpec.StdoutSpec.Pipe -> {
+        JvmExecSpec.StdoutSpec.Inherit -> pb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
+        JvmExecSpec.StdoutSpec.Discard -> pb.redirectOutput(ProcessBuilder.Redirect.DISCARD)
+        is JvmExecSpec.StdoutSpec.Pipe -> {
             val s = out.sink
-            if (s is ExecSpec.SinkSpec.File && isSpecializableRedirect(s)) {
+            if (s is JvmExecSpec.SinkSpec.File && isSpecializableRedirect(s)) {
                 val f = fileOf(s.path)
                 pb.redirectOutput(
                     when (s.write) {
@@ -491,16 +497,16 @@ private fun configureStdout(pb: ProcessBuilder, out: ExecSpec.StdoutSpec) {
     }
 }
 
-private fun configureStderr(pb: ProcessBuilder, out: ExecSpec.StderrSpec) {
+private fun configureStderr(pb: ProcessBuilder, out: JvmExecSpec.StderrSpec) {
     when (out) {
-        ExecSpec.StderrSpec.Inherit -> pb.redirectError(ProcessBuilder.Redirect.INHERIT)
-        ExecSpec.StderrSpec.Discard -> pb.redirectError(ProcessBuilder.Redirect.DISCARD)
-        ExecSpec.StderrSpec.ToStdout -> { /* handled by redirectErrorStream(true) */
+        JvmExecSpec.StderrSpec.Inherit -> pb.redirectError(ProcessBuilder.Redirect.INHERIT)
+        JvmExecSpec.StderrSpec.Discard -> pb.redirectError(ProcessBuilder.Redirect.DISCARD)
+        JvmExecSpec.StderrSpec.ToStdout -> { /* handled by redirectErrorStream(true) */
         }
 
-        is ExecSpec.StderrSpec.Pipe -> {
+        is JvmExecSpec.StderrSpec.Pipe -> {
             val s = out.sink
-            if (s is ExecSpec.SinkSpec.File && isSpecializableRedirect(s)) {
+            if (s is JvmExecSpec.SinkSpec.File && isSpecializableRedirect(s)) {
                 val f = fileOf(s.path)
                 pb.redirectError(
                     when (s.write) {
@@ -594,18 +600,18 @@ internal fun pumpStream(
     }
 }
 
-internal fun writeStdin(proc: Process, stdin: ExecSpec.Input, meta: ExecResult.Meta, kill: KillSwitch) {
+internal fun writeStdin(proc: Process, stdin: JvmExecSpec.Input, meta: ExecResult.Meta, kill: KillSwitch) {
     when (stdin) {
-        is ExecSpec.Input.None -> {
+        is JvmExecSpec.Input.None -> {
             // EOF
             closeQuietly(proc.outputStream)
         }
 
-        is ExecSpec.Input.Inherit -> {
+        is JvmExecSpec.Input.Inherit -> {
             // Do nothing. Do NOT close outputStream here.
         }
 
-        is ExecSpec.Input.Bytes -> {
+        is JvmExecSpec.Input.Bytes -> {
             try {
                 proc.outputStream.use { it.write(stdin.bytes) }
             } catch (t: Throwable) {
@@ -620,7 +626,7 @@ internal fun writeStdin(proc: Process, stdin: ExecSpec.Input, meta: ExecResult.M
             }
         }
 
-        is ExecSpec.Input.Text -> {
+        is JvmExecSpec.Input.Text -> {
             try {
                 proc.outputStream.use { it.write(stdin.text.toByteArray(stdin.charset)) }
             } catch (t: Throwable) {
@@ -635,7 +641,71 @@ internal fun writeStdin(proc: Process, stdin: ExecSpec.Input, meta: ExecResult.M
             }
         }
 
-        is ExecSpec.Input.Writer -> {
+        is JvmExecSpec.Input.Source -> {
+            val inStream =
+                try {
+                    stdin.open().asInputStream()
+                } catch (t: Throwable) {
+                    if (kill.wasKilled()) {
+                        Throwables.propagateFatalPlatformErrorsIfNeeded(t, WORKER_THROWABLE_POLICY)
+                        return
+                    }
+                    kill.killOnce()
+                    Throwables.propagateIfNeeded(t, WORKER_THROWABLE_POLICY)
+                    throw ExecException(ExecError.InputProviderFailed(meta = meta, cause = t))
+                }
+            try {
+                inStream.use { src ->
+                    proc.outputStream.use { dst ->
+                        src.copyTo(dst)
+                    }
+                }
+            } catch (t: Throwable) {
+                if (kill.wasKilled()) {
+                    Throwables.propagateFatalPlatformErrorsIfNeeded(t, WORKER_THROWABLE_POLICY)
+                    return
+                }
+                if (t is java.io.IOException && !proc.isAlive) return
+                kill.killOnce()
+                Throwables.propagateIfNeeded(t, WORKER_THROWABLE_POLICY)
+                throw ExecException(ExecError.StdinWriteFailed(meta = meta, cause = t))
+            }
+        }
+
+        is JvmExecSpec.Input.WriteTo -> {
+            try {
+                proc.outputStream.use { os ->
+                    os.asKxSink().use { sink ->
+                        try {
+                            stdin.write(sink)
+                            sink.flush()
+                        } catch (t: Throwable) {
+                            if (kill.wasKilled()) {
+                                Throwables.propagateFatalPlatformErrorsIfNeeded(t, WORKER_THROWABLE_POLICY)
+                                return
+                            }
+                            if (t is java.io.IOException && !proc.isAlive) return
+                            kill.killOnce()
+                            Throwables.propagateIfNeeded(t, WORKER_THROWABLE_POLICY)
+                            throw ExecException(ExecError.InputProviderFailed(meta = meta, cause = t))
+                        }
+                    }
+                }
+            } catch (e: ExecException) {
+                throw e
+            } catch (t: Throwable) {
+                if (kill.wasKilled()) {
+                    Throwables.propagateFatalPlatformErrorsIfNeeded(t, WORKER_THROWABLE_POLICY)
+                    return
+                }
+                if (t is java.io.IOException && !proc.isAlive) return
+                kill.killOnce()
+                Throwables.propagateIfNeeded(t, WORKER_THROWABLE_POLICY)
+                throw ExecException(ExecError.StdinWriteFailed(meta = meta, cause = t))
+            }
+        }
+
+        is JvmExecSpec.Input.Writer -> {
             try {
                 proc.outputStream.use { os ->
                     try {
@@ -665,7 +735,7 @@ internal fun writeStdin(proc: Process, stdin: ExecSpec.Input, meta: ExecResult.M
             }
         }
 
-        is ExecSpec.Input.FromPath -> {
+        is JvmExecSpec.Input.FromPath -> {
             val inStream =
                 try {
                     Files.newInputStream(stdin.path)
@@ -696,7 +766,7 @@ internal fun writeStdin(proc: Process, stdin: ExecSpec.Input, meta: ExecResult.M
             }
         }
 
-        is ExecSpec.Input.FromStream -> {
+        is JvmExecSpec.Input.FromStream -> {
             val inStream =
                 try {
                     stdin.open()

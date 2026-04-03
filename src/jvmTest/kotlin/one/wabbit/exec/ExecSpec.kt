@@ -1,3 +1,5 @@
+@file:OptIn(PlatformSpecificExecApi::class)
+
 package one.wabbit.exec
 
 import kotlinx.coroutines.async
@@ -72,16 +74,16 @@ class ExecTest {
 
     private fun spec(
         vararg fixtureArgs: String,
-        stdin: ExecSpec.Input = ExecSpec.Input.None,
-        stdout: ExecSpec.StdoutSpec = ExecSpec.StdoutSpec.Pipe(ExecSpec.SinkSpec.Capture(maxBytes = 1024, keep = ExecSpec.Keep.Head)),
-        stderr: ExecSpec.StderrSpec = ExecSpec.StderrSpec.Pipe(ExecSpec.SinkSpec.Capture(maxBytes = 1024, keep = ExecSpec.Keep.Tail)),
+        stdin: JvmExecSpec.Input = JvmExecSpec.Input.None,
+        stdout: JvmExecSpec.StdoutSpec = JvmExecSpec.StdoutSpec.Pipe(JvmExecSpec.SinkSpec.Capture(maxBytes = 1024, keep = ExecSpec.Keep.Head)),
+        stderr: JvmExecSpec.StderrSpec = JvmExecSpec.StderrSpec.Pipe(JvmExecSpec.SinkSpec.Capture(maxBytes = 1024, keep = ExecSpec.Keep.Tail)),
         env: EnvPolicy = EnvPolicy.Inherit(),
         timeout: Duration? = 2.seconds,
         shutdown: ShutdownPolicy = ShutdownPolicy.KillTree,
         cleanupTimeout: Duration = 2.seconds,
         exitPolicy: ExitPolicy = ExitPolicy.Return,
-    ): ExecSpec =
-        ExecSpec(
+    ): JvmExecSpec =
+        JvmExecSpec(
             argv = fixtureArgv(*fixtureArgs),
             stdin = stdin,
             stdout = stdout,
@@ -240,8 +242,8 @@ class ExecTest {
                 spec(
                     "--out", "hello",
                     "--err", "oops",
-                    stdout = ExecSpec.StdoutSpec.Pipe(ExecSpec.SinkSpec.Capture(maxBytes = 1024, keep = ExecSpec.Keep.Head)),
-                    stderr = ExecSpec.StderrSpec.ToStdout,
+                    stdout = JvmExecSpec.StdoutSpec.Pipe(JvmExecSpec.SinkSpec.Capture(maxBytes = 1024, keep = ExecSpec.Keep.Head)),
+                    stderr = JvmExecSpec.StderrSpec.ToStdout,
                 )
             )
         assertTrue(r.ok)
@@ -258,7 +260,7 @@ class ExecTest {
             Exec.execBlocking(
                 spec(
                     "--cat",
-                    stdin = ExecSpec.Input.Text("hello\nworld\n", StandardCharsets.UTF_8),
+                    stdin = JvmExecSpec.Input.Text("hello\nworld\n", StandardCharsets.UTF_8),
                 )
             )
         assertTrue(r.ok)
@@ -275,15 +277,15 @@ class ExecTest {
             Exec.execBlocking(
                 spec(
                     "--cat",
-                    stdin = ExecSpec.Input.FromPath(p),
-                    stdout = ExecSpec.StdoutSpec.Pipe(
-                        ExecSpec.SinkSpec.Capture(
+                    stdin = JvmExecSpec.Input.FromPath(p),
+                    stdout = JvmExecSpec.StdoutSpec.Pipe(
+                        JvmExecSpec.SinkSpec.Capture(
                             maxBytes = input.size + 16,
                             keep = ExecSpec.Keep.Head,
                             overflow = ExecSpec.OverflowPolicy.DrainAndTruncate
                         )
                     ),
-                    stderr = ExecSpec.StderrSpec.Discard,
+                    stderr = JvmExecSpec.StderrSpec.Discard,
                 )
             )
         assertTrue(r.ok)
@@ -297,15 +299,15 @@ class ExecTest {
             Exec.execBlocking(
                 spec(
                     "--cat",
-                    stdin = ExecSpec.Input.FromStream { ByteArrayInputStream(input) },
-                    stdout = ExecSpec.StdoutSpec.Pipe(
-                        ExecSpec.SinkSpec.Capture(
+                    stdin = JvmExecSpec.Input.FromStream { ByteArrayInputStream(input) },
+                    stdout = JvmExecSpec.StdoutSpec.Pipe(
+                        JvmExecSpec.SinkSpec.Capture(
                             maxBytes = input.size + 16,
                             keep = ExecSpec.Keep.Head,
                             overflow = ExecSpec.OverflowPolicy.DrainAndTruncate
                         )
                     ),
-                    stderr = ExecSpec.StderrSpec.Discard,
+                    stderr = JvmExecSpec.StderrSpec.Discard,
                 )
             )
         assertTrue(r.ok)
@@ -318,12 +320,12 @@ class ExecTest {
             Exec.execBlocking(
                 spec(
                     "--spam-out", "10000",
-                    stdout = ExecSpec.StdoutSpec.Pipe(
-                        ExecSpec.SinkSpec.Capture(
+                    stdout = JvmExecSpec.StdoutSpec.Pipe(
+                        JvmExecSpec.SinkSpec.Capture(
                             maxBytes = 128, keep = ExecSpec.Keep.Head,
                             overflow = ExecSpec.OverflowPolicy.DrainAndTruncate)
                     ),
-                    stderr = ExecSpec.StderrSpec.Discard,
+                    stderr = JvmExecSpec.StderrSpec.Discard,
                 )
             )
         assertTrue(r.ok)
@@ -339,12 +341,12 @@ class ExecTest {
                 Exec.execBlocking(
                     spec(
                         "--spam-out", "10000",
-                        stdout = ExecSpec.StdoutSpec.Pipe(
-                            ExecSpec.SinkSpec.Capture(
+                        stdout = JvmExecSpec.StdoutSpec.Pipe(
+                            JvmExecSpec.SinkSpec.Capture(
                                 maxBytes = 128, keep = ExecSpec.Keep.Head,
                                 overflow = ExecSpec.OverflowPolicy.KillProcess)
                         ),
-                        stderr = ExecSpec.StderrSpec.Discard,
+                        stderr = JvmExecSpec.StderrSpec.Discard,
                         shutdown = ShutdownPolicy.KillTree,
                     )
                 )
@@ -364,14 +366,14 @@ class ExecTest {
             Exec.execBlocking(
                 spec(
                     "--out", "hello",
-                    stdout = ExecSpec.StdoutSpec.Pipe(ExecSpec.SinkSpec.File(
+                    stdout = JvmExecSpec.StdoutSpec.Pipe(JvmExecSpec.SinkSpec.File(
                         outFile,
                         // Must be eager to be eligible for ProcessBuilder redirect specialization.
                         // Append(false) means eager=false (lazy open), which requires pumping and thus stats.
                         FileWritePolicy.Append(eager = true),
                         maxBytes = null
                     )),
-                    stderr = ExecSpec.StderrSpec.Discard,
+                    stderr = JvmExecSpec.StderrSpec.Discard,
                 )
             )
         assertTrue(r.ok)
@@ -387,15 +389,15 @@ class ExecTest {
             Exec.execBlocking(
                 spec(
                     "--spam-out", "10000",
-                    stdout = ExecSpec.StdoutSpec.Pipe(
-                        ExecSpec.SinkSpec.File(
+                    stdout = JvmExecSpec.StdoutSpec.Pipe(
+                        JvmExecSpec.SinkSpec.File(
                             path = outFile,
                             write = FileWritePolicy.Append(false),
                             maxBytes = 100,
                             overflow = ExecSpec.OverflowPolicy.DrainAndTruncate,
                         )
                     ),
-                    stderr = ExecSpec.StderrSpec.Discard,
+                    stderr = JvmExecSpec.StderrSpec.Discard,
                 )
             )
         assertTrue(r.ok)
@@ -413,13 +415,13 @@ class ExecTest {
             Exec.execBlocking(
                 spec(
                     "--out", "tee",
-                    stdout = ExecSpec.StdoutSpec.Pipe(
-                        ExecSpec.SinkSpec.Tee(
-                            primary = ExecSpec.SinkSpec.Capture(maxBytes = 1024, keep = ExecSpec.Keep.Head),
-                            branches = listOf(ExecSpec.SinkSpec.File(branchFile, write = FileWritePolicy.Append(false), maxBytes = null))
+                    stdout = JvmExecSpec.StdoutSpec.Pipe(
+                        JvmExecSpec.SinkSpec.Tee(
+                            primary = JvmExecSpec.SinkSpec.Capture(maxBytes = 1024, keep = ExecSpec.Keep.Head),
+                            branches = listOf(JvmExecSpec.SinkSpec.File(branchFile, write = FileWritePolicy.Append(false), maxBytes = null))
                         )
                     ),
-                    stderr = ExecSpec.StderrSpec.Discard,
+                    stderr = JvmExecSpec.StderrSpec.Discard,
                 )
             )
         assertTrue(r.ok)
@@ -450,7 +452,7 @@ class ExecTest {
                         "--sleep-ms", "5000",
                         timeout = 500.milliseconds,
                         shutdown = ShutdownPolicy.KillTree,
-                        stderr = ExecSpec.StderrSpec.Discard,
+                        stderr = JvmExecSpec.StderrSpec.Discard,
                     )
                 )
             }
@@ -476,7 +478,7 @@ class ExecTest {
                         "--sleep-ms", "5000",
                         timeout = 1.seconds,
                         shutdown = ShutdownPolicy.KillTree,
-                        stderr = ExecSpec.StderrSpec.Discard,
+                        stderr = JvmExecSpec.StderrSpec.Discard,
                     )
                 )
             }
@@ -515,7 +517,7 @@ class ExecTest {
                 spec(
                     "--print-env", key,
                     env = EnvPolicy.ClearAndSet(clearBase),
-                    stderr = ExecSpec.StderrSpec.Discard,
+                    stderr = JvmExecSpec.StderrSpec.Discard,
                 )
             )
         assertEquals("1", rClear.stdout!!.text())
@@ -525,7 +527,7 @@ class ExecTest {
                 spec(
                     "--print-env", "PATH",
                     env = EnvPolicy.ClearAndSet(clearBase),
-                    stderr = ExecSpec.StderrSpec.Discard,
+                    stderr = JvmExecSpec.StderrSpec.Discard,
                 )
             )
         assertEquals("<null>", rPathClear.stdout!!.text())
@@ -535,7 +537,7 @@ class ExecTest {
                 spec(
                     "--print-env", "PATH",
                     env = EnvPolicy.Hermetic(mapOf(key to "1")),
-                    stderr = ExecSpec.StderrSpec.Discard,
+                    stderr = JvmExecSpec.StderrSpec.Discard,
                 )
             )
         assertTrue(rPathHerm.stdout!!.text() != "<null>")
@@ -568,7 +570,7 @@ class ExecTest {
                         "--sleep-ms", "5000",
                         timeout = 500.milliseconds,
                         shutdown = ShutdownPolicy.KillTree,
-                        stderr = ExecSpec.StderrSpec.Discard,
+                        stderr = JvmExecSpec.StderrSpec.Discard,
                     )
                 )
             }
@@ -588,7 +590,7 @@ class ExecTest {
                 "--sleep-ms", "5000",
                 timeout = null,
                 shutdown = ShutdownPolicy.KillTree,
-                stderr = ExecSpec.StderrSpec.Discard,
+                stderr = JvmExecSpec.StderrSpec.Discard,
             )
 
         val job = launch {
@@ -609,14 +611,14 @@ class ExecTest {
                 Exec.exec(
                     spec(
                         "--spam-out", "10000",
-                        stdout = ExecSpec.StdoutSpec.Pipe(
-                            ExecSpec.SinkSpec.Capture(
+                        stdout = JvmExecSpec.StdoutSpec.Pipe(
+                            JvmExecSpec.SinkSpec.Capture(
                                 maxBytes = 128,
                                 keep = ExecSpec.Keep.Head,
                                 overflow = ExecSpec.OverflowPolicy.KillProcess
                             )
                         ),
-                        stderr = ExecSpec.StderrSpec.Discard,
+                        stderr = JvmExecSpec.StderrSpec.Discard,
                         shutdown = ShutdownPolicy.KillTree,
                     )
                 )
@@ -659,15 +661,15 @@ class ExecTest {
 
         val rp =
             Exec.spawnBlocking(
-                SpawnSpec(
+                JvmSpawnSpec(
                     argv =
                         fixtureArgv(
                             "--pid-file", pidFile.toString(),
                             "--sleep-ms", "5000",
                         ),
-                    stdin = SpawnSpec.Input.None,
-                    stdout = SpawnSpec.StdoutSpec.Discard,
-                    stderr = SpawnSpec.StderrSpec.Discard,
+                    stdin = JvmSpawnSpec.Input.None,
+                    stdout = JvmSpawnSpec.StdoutSpec.Discard,
+                    stderr = JvmSpawnSpec.StderrSpec.Discard,
                     shutdown = ShutdownPolicy.KillTree,
                 )
             )
@@ -709,10 +711,10 @@ class ExecTest {
                             shutdown = ShutdownPolicy.KillTree,
                             cleanupTimeout = 2.seconds,
                             // Keep I/O simple: only stdin task exists.
-                            stdout = ExecSpec.StdoutSpec.Discard,
-                            stderr = ExecSpec.StderrSpec.Discard,
+                            stdout = JvmExecSpec.StdoutSpec.Discard,
+                            stderr = JvmExecSpec.StderrSpec.Discard,
                             stdin =
-                                ExecSpec.Input.Writer { _ ->
+                                JvmExecSpec.Input.Writer { _ ->
                                     // Let timeout fire and killOnce() happen before we throw.
                                     Thread.sleep(300)
                                     throw OutOfMemoryError("boom-from-stdin-writer")
@@ -759,15 +761,15 @@ class ExecTest {
                         timeout = null,
                         // Force a worker-side InterruptedException from the stdout consumer.
                         stdout =
-                            ExecSpec.StdoutSpec.Pipe(
-                                ExecSpec.SinkSpec.Stream(
+                            JvmExecSpec.StdoutSpec.Pipe(
+                                JvmExecSpec.SinkSpec.Stream(
                                     onChunk = { _, _, _ -> throw InterruptedException("boom-from-worker") },
                                     copyChunks = false,
                                     maxBytes = null,
                                     overflow = ExecSpec.OverflowPolicy.DrainAndTruncate,
                                 ),
                             ),
-                        stderr = ExecSpec.StderrSpec.Discard,
+                        stderr = JvmExecSpec.StderrSpec.Discard,
                     ),
                     virtualThreads = VirtualThreadsPolicy.Never,
                 )
@@ -826,8 +828,8 @@ class ExecTest {
                             "--sleep-ms", "5000",
                             timeout = null,
                             shutdown = ShutdownPolicy.KillTree,
-                            stdout = ExecSpec.StdoutSpec.Discard,
-                            stderr = ExecSpec.StderrSpec.Discard,
+                            stdout = JvmExecSpec.StdoutSpec.Discard,
+                            stderr = JvmExecSpec.StderrSpec.Discard,
                         ),
                         virtualThreads = VirtualThreadsPolicy.Never,
                     )
@@ -884,14 +886,14 @@ class ExecTest {
                 cleanupTimeout = 5.seconds,
                 exitPolicy = ExitPolicy.ThrowOnNonZero,
                 stdout =
-                    ExecSpec.StdoutSpec.Pipe(
-                        ExecSpec.SinkSpec.Capture(
+                    JvmExecSpec.StdoutSpec.Pipe(
+                        JvmExecSpec.SinkSpec.Capture(
                             maxBytes = spamBytes + 1024,
                             keep = ExecSpec.Keep.Head,
                             overflow = ExecSpec.OverflowPolicy.DrainAndTruncate,
                         ),
                     ),
-                stderr = ExecSpec.StderrSpec.Discard,
+                stderr = JvmExecSpec.StderrSpec.Discard,
             )
 
         val d = async { Exec.exec(s) }
