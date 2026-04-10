@@ -59,7 +59,7 @@ You agree that the opportunity to participate in the development of the Project 
 You agree that you are participating as an independent contributor and not as an employee, agent, or representative of Wabbit Corporation. Nothing in this Agreement shall be construed to create any partnership, joint venture, or employer-employee relationship between you and Wabbit Corporation.
 
 ### 9. Data Protection and Privacy
-Wabbit Corporation will collect and process personal data necessary for the administration of contributions in accordance with its Privacy Policy contained in [CONTRIBUTOR_PRIVACY.md](CONTRIBUTOR_PRIVACY.md). By entering into this Agreement, you consent to such processing of your personal data.
+Wabbit Corporation will collect and process personal data necessary for the administration of contributions in accordance with its Privacy Policy contained in [CONTRIBUTOR_PRIVACY.md](../../contributor-privacy/v1.0.0/CONTRIBUTOR_PRIVACY.md). By entering into this Agreement, you consent to such processing of your personal data.
 
 ### 10. Indemnification and Liability Limitations
 To the extent permitted by applicable law, you agree to indemnify and hold harmless Wabbit Corporation, its officers, directors, and agents, against any claim arising from your breach of the representations and warranties in this Agreement. This indemnification obligation shall be limited to actual damages incurred by Wabbit Corporation, and in no event shall your total liability exceed the actual damages incurred by Wabbit Corporation as a direct result of your breach.
