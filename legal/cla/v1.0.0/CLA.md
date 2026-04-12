@@ -8,7 +8,7 @@ Thank you for your interest in contributing to the Wabbit Consulting Corporation
 
 - **"You"** means the individual or legal entity making the contribution.
 - **"Contribution"** means any original work of authorship, including any modifications or additions to an existing work, that is intentionally submitted by You to Wabbit Corporation for inclusion in the Project, such as source code, documentation, or other materials. For example, submitting a pull request or patch via email constitutes a Contribution.
-- **"Project"** means the software project primarily licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) and managed by Wabbit Corporation, with the understanding that Wabbit Corporation may also offer commercial licensing options.
+- **"Project"** means the software project primarily licensed under GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) and managed by Wabbit Corporation, with the understanding that Wabbit Corporation may also offer commercial licensing options.
 
 ### 2. Grant of Licenses
 
