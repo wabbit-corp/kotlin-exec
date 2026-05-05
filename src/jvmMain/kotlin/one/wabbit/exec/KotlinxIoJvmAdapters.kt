@@ -66,10 +66,29 @@ internal fun OutputStream.asKxSink(): Sink =
         }
     }.buffered()
 
+/**
+ * Adapt a JVM [InputStream] factory to portable [ExecSpec.Input].
+ *
+ * The returned input opens the stream when stdin pumping starts, copies it to child stdin, and closes
+ * it after copying. Use this adapter when call sites want to keep the common [ExecSpec] API but their
+ * data source is JVM stream-based.
+ *
+ * @param open stream factory.
+ * @return portable stdin source backed by a JVM stream.
+ */
 @PlatformSpecificExecApi
 fun execInputFromStream(open: () -> InputStream): ExecSpec.Input =
     ExecSpec.Input.Source { open().asKxSource() }
 
+/**
+ * Adapt a JVM [OutputStream] writer callback to portable [ExecSpec.Input].
+ *
+ * The callback receives child stdin as an [OutputStream]. It must write the complete payload and
+ * return; `kotlin-exec` closes the underlying stream after the callback completes.
+ *
+ * @param write callback that writes child stdin.
+ * @return portable stdin writer backed by a JVM output stream.
+ */
 @PlatformSpecificExecApi
 fun execInputWriteTo(write: (OutputStream) -> Unit): ExecSpec.Input =
     ExecSpec.Input.WriteTo { sink ->

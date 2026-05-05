@@ -19,6 +19,20 @@ import java.io.InputStream
 import kotlin.time.Duration.Companion.milliseconds
 import java.util.concurrent.TimeUnit
 
+/**
+ * Low-level JVM coroutine execution engine for [JvmExecSpec].
+ *
+ * This function is public for historical compatibility with early JVM callers, but normal code
+ * should prefer [Exec.exec]. It owns the child lifecycle, pumps requested I/O on [ioDispatcher],
+ * kills the process tree on timeout or cancellation, and reports structured failures as
+ * [ExecException].
+ *
+ * @param spec complete JVM execution specification.
+ * @param ioDispatcher dispatcher used for blocking process and I/O work.
+ * @return completed process result.
+ * @throws ExecException for structured execution failures.
+ */
+@PlatformSpecificExecApi
 @Throws(ExecException::class)
 suspend fun execInternal(
     spec: JvmExecSpec,

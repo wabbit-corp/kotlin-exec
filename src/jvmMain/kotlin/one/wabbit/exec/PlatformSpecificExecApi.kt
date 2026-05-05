@@ -1,5 +1,12 @@
 package one.wabbit.exec
 
+/**
+ * Marks JVM-specific APIs that are not part of the portable `kotlin-exec` surface.
+ *
+ * Opt in when a call site intentionally depends on JVM-only types or controls, such as
+ * `java.nio.file.Path`, `InputStream`, `OutputStream`, charset-specific stdin, raw [Process]
+ * access, or explicit [VirtualThreadsPolicy] selection.
+ */
 @RequiresOptIn(
     level = RequiresOptIn.Level.WARNING,
     message =

@@ -14,6 +14,15 @@ import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
 
 
+/**
+ * JVM [RunningProcess] implementation returned by spawn APIs.
+ *
+ * The constructor is internal; callers receive this type through [Exec.spawn] or
+ * [Exec.spawnBlocking]. Use [JvmRunningProcess.rawProcess] only when JVM-specific integration is
+ * required.
+ *
+ * @property meta command metadata for the spawned process.
+ */
 class RunningProcessImpl internal constructor(
     val meta: ExecResult.Meta,
     private val process: Process,
