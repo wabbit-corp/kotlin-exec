@@ -1,0 +1,6 @@
+# Repo-local check suppressions for empty fixture trees and platform path literals.
+check:ignore E_DUPLICATE_DIRECTORY_TREE src/main
+check:ignore E_DUPLICATE_FILE .banner.png
+check:ignore E_HARDCODED_ABSOLUTE_PATH src/jvmTest/kotlin/one/wabbit/exec/ExecSpec.kt
+check:ignore E_LINE_TOO_LONG src/jvmMain/kotlin/one/wabbit/exec/PlatformSpecificExecApi.kt
+check:ignore E_HARDCODED_ABSOLUTE_PATH src/jvmMain/kotlin/one/wabbit/exec/Internal.kt
