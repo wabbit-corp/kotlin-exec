@@ -1,5 +1,12 @@
 # kotlin-exec
 
+![](./.meta/github-project-banner.png)
+
+<p align=center>
+    <img src="https://img.shields.io/maven-central/v/one.wabbit/kotlin-exec" alt="Maven Central">
+    <img src="https://img.shields.io/badge/Kotlin-Multiplatform-7F52FF" alt="Kotlin Multiplatform">
+</p>
+
 `kotlin-exec` is a Kotlin process execution library for JVM projects that need bounded output
 capture, explicit environment handling, structured failures, and clear ownership of child process
 lifecycle.
@@ -16,7 +23,7 @@ The public API is split between portable `ExecSpec`/`SpawnSpec` models and JVM-s
 for `java.nio.file.Path`, `InputStream`, `OutputStream`, `Charset`, raw `Process` access, and
 virtual-thread selection.
 
-## Installation
+## 🚀 Installation
 
 ```kotlin
 repositories {
@@ -30,7 +37,7 @@ dependencies {
 
 `kotlin-exec` currently publishes a JVM artifact and uses a JDK 21 toolchain.
 
-## Quick Start
+## 🚀 Usage
 
 ```kotlin
 import one.wabbit.exec.Exec

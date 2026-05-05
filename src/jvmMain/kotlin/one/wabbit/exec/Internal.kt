@@ -1,9 +1,9 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 @file:OptIn(PlatformSpecificExecApi::class)
 
 package one.wabbit.exec
 
-import one.wabbit.throwables.Throwables
-import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.Closeable
 import java.io.File
 import java.util.Locale
@@ -21,7 +21,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.time.Duration
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.io.files.Path as KxPath
+import one.wabbit.throwables.Throwables
 
 /**
  * Policy for worker threads (IO pump threads, Dispatchers.IO, virtual threads, etc).
@@ -36,10 +38,9 @@ internal val WORKER_THROWABLE_POLICY: Throwables.Policy =
 /**
  * Best-effort process metadata helpers.
  *
- * Rationale:
- * Kotlin's `runCatching { ... }` catches *Throwable* (including `Error`). In exception-handling code,
- * that is an attractive nuisance: it can accidentally swallow fatal JVM errors (OOME, SOE, LinkageError)
- * and silently degrade abort-signal semantics.
+ * Rationale: Kotlin's `runCatching { ... }` catches *Throwable* (including `Error`). In
+ * exception-handling code, that is an attractive nuisance: it can accidentally swallow fatal JVM
+ * errors (OOME, SOE, LinkageError) and silently degrade abort-signal semantics.
  *
  * These helpers are intentionally narrow:
  * - never throw for non-fatal "best-effort" failures,
@@ -88,17 +89,13 @@ internal suspend fun awaitExitSuspend(proc: Process) {
         val cf = proc.onExit()
         cf.whenComplete { _, ex ->
             if (!cont.isActive) return@whenComplete
-            if (ex != null) cont.resumeWithException(ex)
-            else cont.resume(Unit)
+            if (ex != null) cont.resumeWithException(ex) else cont.resume(Unit)
         }
         // Avoid retaining cancelled continuations (especially for polling with timeouts).
         // This cancels *this* onExit future only, not the process.
-        cont.invokeOnCancellation {
-            runCatching { cf.cancel(false) }
-        }
+        cont.invokeOnCancellation { runCatching { cf.cancel(false) } }
     }
 }
-
 
 internal fun newVirtualThreadPerTaskExecutorOrNull(): ExecutorService? =
     try {
@@ -110,7 +107,6 @@ internal fun newVirtualThreadPerTaskExecutorOrNull(): ExecutorService? =
         null
     }
 
-
 internal fun newVirtualThreadPerTaskExecutorOrThrow(): ExecutorService =
     try {
         val m = Executors::class.java.getMethod("newVirtualThreadPerTaskExecutor")
@@ -120,7 +116,6 @@ internal fun newVirtualThreadPerTaskExecutorOrThrow(): ExecutorService =
         Throwables.propagateIfNeeded(e)
         throw IllegalStateException("Virtual threads not available (need JDK 21+).", e)
     }
-
 
 internal fun shutdownExecutor(es: ExecutorService, timeout: Duration) {
     // First: polite
@@ -150,17 +145,18 @@ internal fun provideMinimalEnv(envMap: MutableMap<String, String>) {
     if (isWindows()) {
         envMap.putIfAbsent("SystemRoot", System.getenv("SystemRoot") ?: "C:\\Windows")
         envMap.putIfAbsent("ComSpec", System.getenv("ComSpec") ?: "C:\\Windows\\System32\\cmd.exe")
-        envMap.putIfAbsent(
-            "PATH",
-            System.getenv("PATH") ?: "C:\\Windows\\System32;C:\\Windows"
-        )
+        envMap.putIfAbsent("PATH", System.getenv("PATH") ?: "C:\\Windows\\System32;C:\\Windows")
         envMap.putIfAbsent("PATHEXT", System.getenv("PATHEXT") ?: ".COM;.EXE;.BAT;.CMD")
-        val tmp = System.getenv("TEMP") ?: System.getenv("TMP") ?: System.getProperty("java.io.tmpdir")
+        val tmp =
+            System.getenv("TEMP") ?: System.getenv("TMP") ?: System.getProperty("java.io.tmpdir")
         envMap.putIfAbsent("TEMP", tmp)
         envMap.putIfAbsent("TMP", tmp)
     } else {
         envMap.putIfAbsent("PATH", "/usr/bin:/bin")
-        envMap.putIfAbsent("TMPDIR", System.getenv("TMPDIR") ?: System.getProperty("java.io.tmpdir"))
+        envMap.putIfAbsent(
+            "TMPDIR",
+            System.getenv("TMPDIR") ?: System.getProperty("java.io.tmpdir"),
+        )
     }
 }
 
@@ -183,17 +179,16 @@ internal fun applyEnv(pb: ProcessBuilder, policy: EnvPolicy) {
 }
 
 /**
- * A sink can be specialized to a ProcessBuilder redirect only when it is a simple unbounded file sink.
- * If it has a maxBytes bound we must pump through FileSink to enforce disk safety.
+ * A sink can be specialized to a ProcessBuilder redirect only when it is a simple unbounded file
+ * sink. If it has a maxBytes bound we must pump through FileSink to enforce disk safety.
  */
 internal fun isSpecializableRedirect(sink: JvmExecSpec.SinkSpec): Boolean =
-    sink is JvmExecSpec.SinkSpec.File &&
-        sink.maxBytes == null &&
-        sink.write.eager
+    sink is JvmExecSpec.SinkSpec.File && sink.maxBytes == null && sink.write.eager
 
 internal fun stdoutNeedsPipe(stdout: JvmExecSpec.StdoutSpec): Boolean =
     when (stdout) {
-        JvmExecSpec.StdoutSpec.Inherit, JvmExecSpec.StdoutSpec.Discard -> false
+        JvmExecSpec.StdoutSpec.Inherit,
+        JvmExecSpec.StdoutSpec.Discard -> false
         is JvmExecSpec.StdoutSpec.Pipe -> !isSpecializableRedirect(stdout.sink)
     }
 
@@ -207,7 +202,8 @@ internal fun stderrNeedsPipe(stderr: JvmExecSpec.StderrSpec): Boolean =
 
 internal fun stdinNeedsTask(stdin: JvmExecSpec.Input): Boolean =
     when (stdin) {
-        JvmExecSpec.Input.None, JvmExecSpec.Input.Inherit -> false
+        JvmExecSpec.Input.None,
+        JvmExecSpec.Input.Inherit -> false
         else -> true
     }
 
@@ -228,9 +224,11 @@ internal fun requireExecutorParallelism(executor: Executor, required: Int) {
             val max = executor.maximumPoolSize
             val core = executor.corePoolSize
             // With unbounded queues, maximumPoolSize is effectively ignored (tasks just queue).
-            // Best-effort heuristic: remainingCapacity == Int.MAX_VALUE strongly suggests unbounded.
+            // Best-effort heuristic: remainingCapacity == Int.MAX_VALUE strongly suggests
+            // unbounded.
             val unboundedQueue =
-                runCatching { executor.queue.remainingCapacity() == Int.MAX_VALUE }.getOrDefault(false)
+                runCatching { executor.queue.remainingCapacity() == Int.MAX_VALUE }
+                    .getOrDefault(false)
             require(max >= required) {
                 "taskExecutor maximumPoolSize=$max < requiredParallelism=$required; " +
                     "this can deadlock process I/O (stdout/stderr pumping needs concurrency)."
@@ -272,7 +270,6 @@ internal fun closeQuietly(vararg c: Any?) {
     }
 }
 
-
 /**
  * Worker-thread variant: do NOT restore interrupt status.
  *
@@ -295,14 +292,15 @@ internal fun closeQuietlyWorker(vararg c: Any?) {
     }
 }
 
-
 internal fun killProcessTree(proc: Process) {
     try {
         val h = proc.toHandle()
         // descendants first
         try {
             h.descendants().forEach { ph ->
-                try { ph.destroyForcibly() } catch (t: Throwable) {
+                try {
+                    ph.destroyForcibly()
+                } catch (t: Throwable) {
                     restoreInterruptFlagIfNeeded(t)
                     Throwables.propagateFatalPlatformErrorsIfNeeded(t)
                 }
@@ -311,14 +309,18 @@ internal fun killProcessTree(proc: Process) {
             restoreInterruptFlagIfNeeded(t)
             Throwables.propagateFatalPlatformErrorsIfNeeded(t)
         }
-        try { h.destroyForcibly() } catch (t: Throwable) {
+        try {
+            h.destroyForcibly()
+        } catch (t: Throwable) {
             restoreInterruptFlagIfNeeded(t)
             Throwables.propagateFatalPlatformErrorsIfNeeded(t)
         }
     } catch (t: Throwable) {
         restoreInterruptFlagIfNeeded(t)
         Throwables.propagateFatalPlatformErrorsIfNeeded(t)
-        try { proc.destroyForcibly() } catch (t2: Throwable) {
+        try {
+            proc.destroyForcibly()
+        } catch (t2: Throwable) {
             restoreInterruptFlagIfNeeded(t2)
             Throwables.propagateFatalPlatformErrorsIfNeeded(t2)
         }
@@ -330,7 +332,9 @@ internal fun terminateProcessTree(proc: Process) {
         val h = proc.toHandle()
         try {
             h.descendants().forEach { ph ->
-                try { ph.destroy() } catch (t: Throwable) {
+                try {
+                    ph.destroy()
+                } catch (t: Throwable) {
                     restoreInterruptFlagIfNeeded(t)
                     Throwables.propagateFatalPlatformErrorsIfNeeded(t)
                 }
@@ -339,14 +343,18 @@ internal fun terminateProcessTree(proc: Process) {
             restoreInterruptFlagIfNeeded(t)
             Throwables.propagateFatalPlatformErrorsIfNeeded(t)
         }
-        try { h.destroy() } catch (t: Throwable) {
+        try {
+            h.destroy()
+        } catch (t: Throwable) {
             restoreInterruptFlagIfNeeded(t)
             Throwables.propagateFatalPlatformErrorsIfNeeded(t)
         }
     } catch (t: Throwable) {
         restoreInterruptFlagIfNeeded(t)
         Throwables.propagateFatalPlatformErrorsIfNeeded(t)
-        try { proc.destroy() } catch (t2: Throwable) {
+        try {
+            proc.destroy()
+        } catch (t2: Throwable) {
             restoreInterruptFlagIfNeeded(t2)
             Throwables.propagateFatalPlatformErrorsIfNeeded(t2)
         }
@@ -380,10 +388,7 @@ internal fun launchFutureTask(executor: Executor?, name: String, task: FutureTas
     }
 }
 
-internal data class AwaitAllResult(
-    val ok: Boolean,
-    val interrupted: InterruptedException? = null,
-)
+internal data class AwaitAllResult(val ok: Boolean, val interrupted: InterruptedException? = null)
 
 internal fun awaitAllWithin(tasks: List<FutureTask<Unit>>, cleanup: Deadline): AwaitAllResult {
     for (t in tasks) {
@@ -410,7 +415,9 @@ internal fun joinAllWithin(threads: List<Thread>, cleanup: Deadline): Boolean {
         if (!t.isAlive) continue
         val rem = cleanup.remainingMillis()
         if (rem <= 0L) return false
-        try { t.join(rem) } catch (ie: InterruptedException) {
+        try {
+            t.join(rem)
+        } catch (ie: InterruptedException) {
             Thread.currentThread().interrupt()
             return false
         }
@@ -446,18 +453,26 @@ internal class KillSwitch(
                         closeQuietlyWorker(proc.inputStream, proc.errorStream)
                     } else {
                         val pid = runCatching { proc.pid() }.getOrNull()
-                        Thread({
-                            try { Thread.sleep(graceMs) } catch (_: InterruptedException) {}
-                            if (proc.isAlive) {
-                                killProcessTree(proc)
+                        Thread(
+                                {
+                                    try {
+                                        Thread.sleep(graceMs)
+                                    } catch (_: InterruptedException) {}
+                                    if (proc.isAlive) {
+                                        killProcessTree(proc)
+                                    }
+                                    // Only close stdout/stderr after escalation (or after kill) to
+                                    // avoid sabotaging
+                                    // graceful termination output (broken pipes / SIGPIPE /
+                                    // truncated captures).
+                                    closeQuietlyWorker(proc.inputStream, proc.errorStream)
+                                },
+                                "proc-kill-escalate-${pid ?: "?"}",
+                            )
+                            .apply {
+                                isDaemon = true
+                                start()
                             }
-                            // Only close stdout/stderr after escalation (or after kill) to avoid sabotaging
-                            // graceful termination output (broken pipes / SIGPIPE / truncated captures).
-                            closeQuietlyWorker(proc.inputStream, proc.errorStream)
-                        }, "proc-kill-escalate-${pid ?: "?"}").apply {
-                            isDaemon = true
-                            start()
-                        }
                     }
                 }
             }

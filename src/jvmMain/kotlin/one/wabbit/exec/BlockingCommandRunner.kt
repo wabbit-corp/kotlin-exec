@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 @file:OptIn(PlatformSpecificExecApi::class)
 
 package one.wabbit.exec
 
-import one.wabbit.throwables.Throwables
 import java.io.InputStream
 import java.nio.file.Files
 import java.util.concurrent.ExecutionException
@@ -14,9 +15,13 @@ import java.util.concurrent.TimeoutException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.io.asInputStream
+import one.wabbit.throwables.Throwables
 
 @Throws(ExecException::class)
-internal fun execBlockingInternal(spec: JvmExecSpec, virtualThreads: VirtualThreadsPolicy = VirtualThreadsPolicy.Prefer): ExecResult {
+internal fun execBlockingInternal(
+    spec: JvmExecSpec,
+    virtualThreads: VirtualThreadsPolicy = VirtualThreadsPolicy.Prefer,
+): ExecResult {
     fun runWith(es: ExecutorService?): ExecResult =
         try {
             execBlockingInternalWithExecutor(spec, taskExecutor = es)
@@ -32,7 +37,10 @@ internal fun execBlockingInternal(spec: JvmExecSpec, virtualThreads: VirtualThre
 }
 
 @Throws(ExecException::class)
-internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: Executor?): ExecResult {
+internal fun execBlockingInternalWithExecutor(
+    spec: JvmExecSpec,
+    taskExecutor: Executor?,
+): ExecResult {
     val startNanos = System.nanoTime()
     val baseMeta = ExecResult.Meta(argv = spec.argv, pid = null)
 
@@ -44,22 +52,29 @@ internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: E
         requireExecutorParallelism(taskExecutor, required)
     }
 
-    val pb = try {
-        buildProcessBuilder(spec)
-    } catch (t: Throwable) {
-        Throwables.propagateIfNeeded(t)
-        throw ExecException(ExecError.ConfigureFailed(meta = baseMeta, cause = t))
-    }
+    val pb =
+        try {
+            buildProcessBuilder(spec)
+        } catch (t: Throwable) {
+            Throwables.propagateIfNeeded(t)
+            throw ExecException(ExecError.ConfigureFailed(meta = baseMeta, cause = t))
+        }
 
-    val proc = try {
-        pb.start()
-    } catch (t: Throwable) {
-        Throwables.propagateIfNeeded(t)
-        throw ExecException(ExecError.SpawnFailed(meta = baseMeta, cause = t))
-    }
+    val proc =
+        try {
+            pb.start()
+        } catch (t: Throwable) {
+            Throwables.propagateIfNeeded(t)
+            throw ExecException(ExecError.SpawnFailed(meta = baseMeta, cause = t))
+        }
 
     val meta = baseMeta.copy(pid = pidOrNull(proc))
-    val kill = KillSwitch(proc, closeStdinOnKill = spec.stdin !is JvmExecSpec.Input.Inherit, shutdown = spec.shutdown)
+    val kill =
+        KillSwitch(
+            proc,
+            closeStdinOnKill = spec.stdin !is JvmExecSpec.Input.Inherit,
+            shutdown = spec.shutdown,
+        )
 
     // Create sinks for piped streams. Sink creation can now throw (e.g. eager File sinks).
     var stdoutSink: Sink? = null
@@ -75,7 +90,9 @@ internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: E
                 stderrSink?.close()
                 kill.killOnce()
                 Throwables.propagateIfNeeded(t)
-                throw ExecException(ExecError.OutputSinkFailed(meta = meta, stream = StreamId.STDOUT, cause = t))
+                throw ExecException(
+                    ExecError.OutputSinkFailed(meta = meta, stream = StreamId.STDOUT, cause = t)
+                )
             }
         }
     // stderr sink
@@ -89,22 +106,27 @@ internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: E
                 stderrSink?.close()
                 kill.killOnce()
                 Throwables.propagateIfNeeded(t)
-                throw ExecException(ExecError.OutputSinkFailed(meta = meta, stream = StreamId.STDERR, cause = t))
+                throw ExecException(
+                    ExecError.OutputSinkFailed(meta = meta, stream = StreamId.STDERR, cause = t)
+                )
             }
         }
 
-// Ensure sink resources (file handles, etc) are released on *all* exit paths.
+    // Ensure sink resources (file handles, etc) are released on *all* exit paths.
     try {
 
-        val stdoutTask = stdoutSink?.let {
-            FutureTask { pumpStream(proc.inputStream, it, meta, StreamId.STDOUT, kill) }
-        }
-        val stderrTask = stderrSink?.let {
-            FutureTask { pumpStream(proc.errorStream, it, meta, StreamId.STDERR, kill) }
-        }
+        val stdoutTask =
+            stdoutSink?.let {
+                FutureTask { pumpStream(proc.inputStream, it, meta, StreamId.STDOUT, kill) }
+            }
+        val stderrTask =
+            stderrSink?.let {
+                FutureTask { pumpStream(proc.errorStream, it, meta, StreamId.STDERR, kill) }
+            }
 
         val stdinTask: FutureTask<Unit>? =
-            if (stdinNeedsTask(spec.stdin)) FutureTask { writeStdin(proc, spec.stdin, meta, kill) } else null
+            if (stdinNeedsTask(spec.stdin)) FutureTask { writeStdin(proc, spec.stdin, meta, kill) }
+            else null
 
         try {
             stdoutTask?.let { launchFutureTask(taskExecutor, "proc-stdout-${meta.pid ?: "?"}", it) }
@@ -119,7 +141,7 @@ internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: E
                     phase = Phase.Cleanup,
                     cause = t,
                     message = "Failed to start I/O pump tasks",
-                ),
+                )
             )
         }
 
@@ -129,13 +151,16 @@ internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: E
             }
 
             JvmExecSpec.Input.Inherit -> {
-                // ProcessBuilder.Redirect.INHERIT handles it. Do nothing, do not close outputStream.
+                // ProcessBuilder.Redirect.INHERIT handles it. Do nothing, do not close
+                // outputStream.
             }
 
             else -> {
                 // potentially blocking (large stdin) => run concurrently
                 try {
-                    stdinTask?.let { launchFutureTask(taskExecutor, "proc-stdin-${meta.pid ?: "?"}", it) }
+                    stdinTask?.let {
+                        launchFutureTask(taskExecutor, "proc-stdin-${meta.pid ?: "?"}", it)
+                    }
                 } catch (t: Throwable) {
                     kill.killOnce()
                     Throwables.propagateIfNeeded(t)
@@ -145,7 +170,7 @@ internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: E
                             phase = Phase.Cleanup,
                             cause = t,
                             message = "Failed to start stdin task",
-                        ),
+                        )
                     )
                 }
             }
@@ -164,10 +189,13 @@ internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: E
                     true
                 }
         } catch (ie: InterruptedException) {
-            // If the process already exited, treat this as a late interrupt and allow result to proceed.
+            // If the process already exited, treat this as a late interrupt and allow result to
+            // proceed.
             //
-            // IMPORTANT: InterruptedException clears the interrupted flag. Restore immediately so we
-            // never lose it, even if we later throw for some other reason (pump error, timeout, etc).
+            // IMPORTANT: InterruptedException clears the interrupted flag. Restore immediately so
+            // we
+            // never lose it, even if we later throw for some other reason (pump error, timeout,
+            // etc).
             Thread.currentThread().interrupt()
             interrupted = ie
             finished = !proc.isAlive
@@ -194,14 +222,20 @@ internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: E
         if (awaitRes.interrupted != null && interrupted == null) interrupted = awaitRes.interrupted
 
         // If we were interrupted but tasks are already done, treat cleanup as complete.
-        if (!awaitRes.ok && tasks.all { it.isDone }) awaitRes = AwaitAllResult(ok = true, interrupted = awaitRes.interrupted)
+        if (!awaitRes.ok && tasks.all { it.isDone })
+            awaitRes = AwaitAllResult(ok = true, interrupted = awaitRes.interrupted)
 
         // If tasks didn't finish in time, do a last-ditch unblock: killOnce() closes streams.
         if (!awaitRes.ok) {
             kill.killOnce()
             val awaitRes2 = awaitAllWithin(tasks, cleanupDeadline)
-            if (awaitRes2.interrupted != null && interrupted == null) interrupted = awaitRes2.interrupted
-            awaitRes = AwaitAllResult(ok = awaitRes2.ok, interrupted = awaitRes.interrupted ?: awaitRes2.interrupted)
+            if (awaitRes2.interrupted != null && interrupted == null)
+                interrupted = awaitRes2.interrupted
+            awaitRes =
+                AwaitAllResult(
+                    ok = awaitRes2.ok,
+                    interrupted = awaitRes.interrupted ?: awaitRes2.interrupted,
+                )
         }
 
         val joinedAll = awaitRes.ok
@@ -254,9 +288,12 @@ internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: E
         // NOTE: we intentionally do NOT immediately throw here.
         //
         // Rationale:
-        // - firstPumpError() must still run to observe and propagate fatal JVM errors from pump tasks.
-        // - At the API boundary, timeout/interrupt semantics may take precedence over ordinary pump failures.
-        val pumpError: ExecError? = firstPumpError(stdoutTask, stderrTask, stdinTask, meta, captures)
+        // - firstPumpError() must still run to observe and propagate fatal JVM errors from pump
+        // tasks.
+        // - At the API boundary, timeout/interrupt semantics may take precedence over ordinary pump
+        // failures.
+        val pumpError: ExecError? =
+            firstPumpError(stdoutTask, stderrTask, stdinTask, meta, captures)
 
         if (timedOut) {
             throw ExecException(
@@ -265,13 +302,15 @@ internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: E
                     timeoutMs = spec.timeout?.inWholeMilliseconds ?: 0L,
                     exitCodeAfterKill = exitAfterKill,
                     captures = captures,
-                ),
+                )
             )
         }
 
         if (interrupted != null) {
-            // Interrupted flag was restored at the catch site (and awaitAllWithin() also restores it).
-            // If the process exited and we successfully joined tasks, don't turn a late interrupt into a hard failure.
+            // Interrupted flag was restored at the catch site (and awaitAllWithin() also restores
+            // it).
+            // If the process exited and we successfully joined tasks, don't turn a late interrupt
+            // into a hard failure.
             if (!finished || !joinedAll) {
                 throw ExecException(
                     ExecError.Cancelled(
@@ -279,18 +318,17 @@ internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: E
                         cause = interrupted,
                         exitCodeAfterKill = exitAfterKill,
                         captures = captures,
-                    ),
+                    )
                 )
             }
         }
 
-        // Now that timeout/interrupt semantics are handled, report pump failures (overflow/sink/consumer/etc).
+        // Now that timeout/interrupt semantics are handled, report pump failures
+        // (overflow/sink/consumer/etc).
         if (pumpError != null) throw ExecException(pumpError.copyWithCaptures(captures))
 
         if (finishError != null) {
-            throw ExecException(
-                finishError.copyWithCaptures(captures),
-            )
+            throw ExecException(finishError.copyWithCaptures(captures))
         }
 
         if (!joinedAll) {
@@ -299,9 +337,10 @@ internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: E
                 ExecError.CleanupFailed(
                     meta = meta,
                     cause = null,
-                    message = "Cleanup exceeded ${spec.cleanupTimeout.inWholeMilliseconds}ms (tasks did not finish)",
+                    message =
+                        "Cleanup exceeded ${spec.cleanupTimeout.inWholeMilliseconds}ms (tasks did not finish)",
                     captures = captures,
-                ),
+                )
             )
         }
 
@@ -319,17 +358,14 @@ internal fun execBlockingInternalWithExecutor(spec: JvmExecSpec, taskExecutor: E
 
         if (spec.exitPolicy == ExitPolicy.ThrowOnNonZero && exit != 0) {
             throw ExecException(
-                ExecError.ExitNonZero(
-                    meta = meta,
-                    exitCode = exit,
-                    captures = captures,
-                ),
+                ExecError.ExitNonZero(meta = meta, exitCode = exit, captures = captures)
             )
         }
 
         return result
     } finally {
-        // Best-effort: ensure sinks release resources even when no finish() happened (file tee branches, etc).
+        // Best-effort: ensure sinks release resources even when no finish() happened (file tee
+        // branches, etc).
         stdoutSink?.close()
         stderrSink?.close()
     }
@@ -354,12 +390,22 @@ private fun firstPumpError(
                 is ExecException -> c.error.copyWithCaptures(captures)
                 null -> {
                     Throwables.propagateIfNeeded(e, WORKER_THROWABLE_POLICY)
-                    ExecError.Unexpected(meta = meta, phase = Phase.Cleanup, cause = e, captures = captures)
+                    ExecError.Unexpected(
+                        meta = meta,
+                        phase = Phase.Cleanup,
+                        cause = e,
+                        captures = captures,
+                    )
                 }
 
                 else -> {
                     Throwables.propagateIfNeeded(c, WORKER_THROWABLE_POLICY)
-                    ExecError.Unexpected(meta = meta, phase = Phase.Cleanup, cause = c, captures = captures)
+                    ExecError.Unexpected(
+                        meta = meta,
+                        phase = Phase.Cleanup,
+                        cause = c,
+                        captures = captures,
+                    )
                 }
             }
         } catch (_: TimeoutException) {
@@ -373,9 +419,7 @@ private fun firstPumpError(
         }
     }
 
-    return unwrap(stdoutTask)
-        ?: unwrap(stderrTask)
-        ?: unwrap(stdinTask)
+    return unwrap(stdoutTask) ?: unwrap(stderrTask) ?: unwrap(stdinTask)
 }
 
 /** Attach captures to any error (best-effort). */
@@ -404,8 +448,10 @@ internal fun validateSpecOrThrow(spec: JvmExecSpec, meta: ExecResult.Meta) {
 
     fun validateSink(s: JvmExecSpec.SinkSpec, label: String) {
         when (s) {
-            is JvmExecSpec.SinkSpec.Capture -> require(s.maxBytes > 0) { "$label capture maxBytes must be > 0" }
-            is JvmExecSpec.SinkSpec.Stream -> s.maxBytes?.let { require(it > 0) { "$label stream maxBytes must be > 0" } }
+            is JvmExecSpec.SinkSpec.Capture ->
+                require(s.maxBytes > 0) { "$label capture maxBytes must be > 0" }
+            is JvmExecSpec.SinkSpec.Stream ->
+                s.maxBytes?.let { require(it > 0) { "$label stream maxBytes must be > 0" } }
             is JvmExecSpec.SinkSpec.WriteTo -> {
                 s.maxBytes?.let { require(it > 0) { "$label writeTo maxBytes must be > 0" } }
             }
@@ -431,9 +477,7 @@ internal fun validateSpecOrThrow(spec: JvmExecSpec, meta: ExecResult.Meta) {
 
     spec.timeout?.let { require(it.isFinite()) { "timeout must be finite or null" } }
     require(spec.cleanupTimeout.isFinite()) { "cleanupTimeout must be finite" }
-    require(spec.cleanupTimeout > Duration.ZERO) {
-        "cleanupTimeout must be > 0"
-    }
+    require(spec.cleanupTimeout > Duration.ZERO) { "cleanupTimeout must be > 0" }
 
     when (val s = spec.shutdown) {
         is ShutdownPolicy.KillTree -> {}
@@ -488,7 +532,7 @@ private fun configureStdout(pb: ProcessBuilder, out: JvmExecSpec.StdoutSpec) {
                     when (s.write) {
                         is FileWritePolicy.Append -> ProcessBuilder.Redirect.appendTo(f)
                         else -> ProcessBuilder.Redirect.to(f)
-                    },
+                    }
                 )
             } else {
                 pb.redirectOutput(ProcessBuilder.Redirect.PIPE)
@@ -501,7 +545,8 @@ private fun configureStderr(pb: ProcessBuilder, out: JvmExecSpec.StderrSpec) {
     when (out) {
         JvmExecSpec.StderrSpec.Inherit -> pb.redirectError(ProcessBuilder.Redirect.INHERIT)
         JvmExecSpec.StderrSpec.Discard -> pb.redirectError(ProcessBuilder.Redirect.DISCARD)
-        JvmExecSpec.StderrSpec.ToStdout -> { /* handled by redirectErrorStream(true) */
+        JvmExecSpec.StderrSpec.ToStdout -> {
+            /* handled by redirectErrorStream(true) */
         }
 
         is JvmExecSpec.StderrSpec.Pipe -> {
@@ -512,7 +557,7 @@ private fun configureStderr(pb: ProcessBuilder, out: JvmExecSpec.StderrSpec) {
                     when (s.write) {
                         is FileWritePolicy.Append -> ProcessBuilder.Redirect.appendTo(f)
                         is FileWritePolicy.Truncate -> ProcessBuilder.Redirect.to(f)
-                    },
+                    }
                 )
             } else {
                 pb.redirectError(ProcessBuilder.Redirect.PIPE)
@@ -524,8 +569,8 @@ private fun configureStderr(pb: ProcessBuilder, out: JvmExecSpec.StderrSpec) {
 /**
  * Drain stream to sink.
  *
- * Important: If the process was killed (timeout/cancel/output-limit from another task),
- * stream reads may throw due to stream closure. Those exceptions are suppressed.
+ * Important: If the process was killed (timeout/cancel/output-limit from another task), stream
+ * reads may throw due to stream closure. Those exceptions are suppressed.
  */
 internal fun pumpStream(
     ins: InputStream,
@@ -537,29 +582,35 @@ internal fun pumpStream(
     val buf = ByteArray(8192)
     try {
         while (true) {
-            val n = try {
-                ins.read(buf)
-            } catch (t: Throwable) {
-                if (kill.wasKilled()) {
-                    // Shutdown noise is expected during kill/timeout/cancel paths.
-                    //
-                    // IMPORTANT: Do NOT restore interrupt status here. Pump tasks often run on pooled
-                    // threads (Dispatchers.IO / executors); restoring interrupts can "poison" the pool.
-                    Throwables.propagateFatalPlatformErrorsIfNeeded(t, WORKER_THROWABLE_POLICY)
-                    break
+            val n =
+                try {
+                    ins.read(buf)
+                } catch (t: Throwable) {
+                    if (kill.wasKilled()) {
+                        // Shutdown noise is expected during kill/timeout/cancel paths.
+                        //
+                        // IMPORTANT: Do NOT restore interrupt status here. Pump tasks often run on
+                        // pooled
+                        // threads (Dispatchers.IO / executors); restoring interrupts can "poison"
+                        // the pool.
+                        Throwables.propagateFatalPlatformErrorsIfNeeded(t, WORKER_THROWABLE_POLICY)
+                        break
+                    }
+                    // If we can't read a piped stream, we must kill to avoid deadlocks/leaks.
+                    kill.killOnce()
+                    Throwables.propagateIfNeeded(t, WORKER_THROWABLE_POLICY)
+                    throw ExecException(
+                        ExecError.StreamReadFailed(meta = meta, stream = stream, cause = t)
+                    )
                 }
-                // If we can't read a piped stream, we must kill to avoid deadlocks/leaks.
-                kill.killOnce()
-                Throwables.propagateIfNeeded(t, WORKER_THROWABLE_POLICY)
-                throw ExecException(ExecError.StreamReadFailed(meta = meta, stream = stream, cause = t))
-            }
             if (n == -1) break
             val err =
                 try {
                     sink.offer(buf, 0, n)
                 } catch (t: Throwable) {
                     // If we're already killing (timeout/cancel/output-limit from another task),
-                    // and we get an interrupt-based consumer/sink failure, treat it as shutdown noise.
+                    // and we get an interrupt-based consumer/sink failure, treat it as shutdown
+                    // noise.
                     if (kill.wasKilled() && t is ExecException) {
                         when (val e = t.error) {
                             is ExecError.OutputConsumerFailed ->
@@ -577,8 +628,10 @@ internal fun pumpStream(
                     throw t
                 }
             if (err != null) {
-                // If we're already killing (timeout/cancel/output-limit), and the sink reports an interrupt-based
-                // consumer failure, treat it as a normal shutdown signal rather than "consumer exploded".
+                // If we're already killing (timeout/cancel/output-limit), and the sink reports an
+                // interrupt-based
+                // consumer failure, treat it as a normal shutdown signal rather than "consumer
+                // exploded".
                 if (kill.wasKilled()) {
                     when (err) {
                         is ExecError.OutputConsumerFailed ->
@@ -590,7 +643,8 @@ internal fun pumpStream(
                         else -> {}
                     }
                 }
-                // Output-limit/consumer errors should terminate the run; killOnce() closes streams to unblock others.
+                // Output-limit/consumer errors should terminate the run; killOnce() closes streams
+                // to unblock others.
                 kill.killOnce()
                 throw ExecException(err)
             }
@@ -600,7 +654,12 @@ internal fun pumpStream(
     }
 }
 
-internal fun writeStdin(proc: Process, stdin: JvmExecSpec.Input, meta: ExecResult.Meta, kill: KillSwitch) {
+internal fun writeStdin(
+    proc: Process,
+    stdin: JvmExecSpec.Input,
+    meta: ExecResult.Meta,
+    kill: KillSwitch,
+) {
     when (stdin) {
         is JvmExecSpec.Input.None -> {
             // EOF
@@ -655,11 +714,7 @@ internal fun writeStdin(proc: Process, stdin: JvmExecSpec.Input, meta: ExecResul
                     throw ExecException(ExecError.InputProviderFailed(meta = meta, cause = t))
                 }
             try {
-                inStream.use { src ->
-                    proc.outputStream.use { dst ->
-                        src.copyTo(dst)
-                    }
-                }
+                inStream.use { src -> proc.outputStream.use { dst -> src.copyTo(dst) } }
             } catch (t: Throwable) {
                 if (kill.wasKilled()) {
                     Throwables.propagateFatalPlatformErrorsIfNeeded(t, WORKER_THROWABLE_POLICY)
@@ -681,13 +736,18 @@ internal fun writeStdin(proc: Process, stdin: JvmExecSpec.Input, meta: ExecResul
                             sink.flush()
                         } catch (t: Throwable) {
                             if (kill.wasKilled()) {
-                                Throwables.propagateFatalPlatformErrorsIfNeeded(t, WORKER_THROWABLE_POLICY)
+                                Throwables.propagateFatalPlatformErrorsIfNeeded(
+                                    t,
+                                    WORKER_THROWABLE_POLICY,
+                                )
                                 return
                             }
                             if (t is java.io.IOException && !proc.isAlive) return
                             kill.killOnce()
                             Throwables.propagateIfNeeded(t, WORKER_THROWABLE_POLICY)
-                            throw ExecException(ExecError.InputProviderFailed(meta = meta, cause = t))
+                            throw ExecException(
+                                ExecError.InputProviderFailed(meta = meta, cause = t)
+                            )
                         }
                     }
                 }
@@ -712,7 +772,10 @@ internal fun writeStdin(proc: Process, stdin: JvmExecSpec.Input, meta: ExecResul
                         stdin.write(os)
                     } catch (t: Throwable) {
                         if (kill.wasKilled()) {
-                            Throwables.propagateFatalPlatformErrorsIfNeeded(t, WORKER_THROWABLE_POLICY)
+                            Throwables.propagateFatalPlatformErrorsIfNeeded(
+                                t,
+                                WORKER_THROWABLE_POLICY,
+                            )
                             return
                         }
                         if (t is java.io.IOException && !proc.isAlive) return
@@ -749,11 +812,7 @@ internal fun writeStdin(proc: Process, stdin: JvmExecSpec.Input, meta: ExecResul
                     throw ExecException(ExecError.InputProviderFailed(meta = meta, cause = t))
                 }
             try {
-                inStream.use { src ->
-                    proc.outputStream.use { dst ->
-                        src.copyTo(dst)
-                    }
-                }
+                inStream.use { src -> proc.outputStream.use { dst -> src.copyTo(dst) } }
             } catch (t: Throwable) {
                 if (kill.wasKilled()) {
                     Throwables.propagateFatalPlatformErrorsIfNeeded(t, WORKER_THROWABLE_POLICY)
@@ -780,11 +839,7 @@ internal fun writeStdin(proc: Process, stdin: JvmExecSpec.Input, meta: ExecResul
                     throw ExecException(ExecError.InputProviderFailed(meta = meta, cause = t))
                 }
             try {
-                inStream.use { src ->
-                    proc.outputStream.use { dst ->
-                        src.copyTo(dst)
-                    }
-                }
+                inStream.use { src -> proc.outputStream.use { dst -> src.copyTo(dst) } }
             } catch (t: Throwable) {
                 if (kill.wasKilled()) {
                     Throwables.propagateFatalPlatformErrorsIfNeeded(t, WORKER_THROWABLE_POLICY)

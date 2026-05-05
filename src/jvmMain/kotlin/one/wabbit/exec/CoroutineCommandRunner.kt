@@ -1,23 +1,24 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 @file:OptIn(PlatformSpecificExecApi::class, InternalCoroutinesApi::class)
 
 package one.wabbit.exec
 
-import one.wabbit.throwables.Throwables
+import java.io.InputStream
+import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.InputStream
-import kotlin.time.Duration.Companion.milliseconds
-import java.util.concurrent.TimeUnit
+import one.wabbit.throwables.Throwables
 
 /**
  * Low-level JVM coroutine execution engine for [JvmExecSpec].
@@ -42,15 +43,17 @@ suspend fun execInternal(
     val baseMeta = ExecResult.Meta(argv = spec.argv, pid = null)
 
     validateSpecOrThrow(spec, baseMeta)
-    // Cancellation is not preemptive; make it win early to avoid spawning work when already cancelled.
+    // Cancellation is not preemptive; make it win early to avoid spawning work when already
+    // cancelled.
     currentCoroutineContext().ensureActive()
 
-    val pb = try {
-        buildProcessBuilder(spec)
-    } catch (t: Throwable) {
-        Throwables.propagateIfNeeded(t, WORKER_THROWABLE_POLICY)
-        throw ExecException(ExecError.ConfigureFailed(meta = baseMeta, cause = t))
-    }
+    val pb =
+        try {
+            buildProcessBuilder(spec)
+        } catch (t: Throwable) {
+            Throwables.propagateIfNeeded(t, WORKER_THROWABLE_POLICY)
+            throw ExecException(ExecError.ConfigureFailed(meta = baseMeta, cause = t))
+        }
 
     // Spawn in IO context, but guard against cancellation races that can orphan a started process.
     val proc =
@@ -66,7 +69,8 @@ suspend fun execInternal(
                     throw ExecException(ExecError.SpawnFailed(meta = baseMeta, cause = t))
                 }
 
-            // Critical: if cancellation happened during/around spawn, kill the process we just started.
+            // Critical: if cancellation happened during/around spawn, kill the process we just
+            // started.
             try {
                 currentCoroutineContext().ensureActive()
                 p
@@ -78,9 +82,15 @@ suspend fun execInternal(
         }
 
     val meta = baseMeta.copy(pid = pidOrNull(proc))
-    val kill = KillSwitch(proc, closeStdinOnKill = spec.stdin !is JvmExecSpec.Input.Inherit, shutdown = spec.shutdown)
+    val kill =
+        KillSwitch(
+            proc,
+            closeStdinOnKill = spec.stdin !is JvmExecSpec.Input.Inherit,
+            shutdown = spec.shutdown,
+        )
 
-    // Second guard: cancellation in the tiny window between returning from withContext and installing hooks.
+    // Second guard: cancellation in the tiny window between returning from withContext and
+    // installing hooks.
     try {
         currentCoroutineContext().ensureActive()
     } catch (ce: CancellationException) {
@@ -90,9 +100,10 @@ suspend fun execInternal(
 
     // Cancellation hook: cancel => kill tree.
     val parentJob = currentCoroutineContext()[Job]
-    val cancelHandle = parentJob?.invokeOnCompletion(onCancelling = true, invokeImmediately = true) { cause ->
-        if (cause != null) kill.killOnce()
-    }
+    val cancelHandle =
+        parentJob?.invokeOnCompletion(onCancelling = true, invokeImmediately = true) { cause ->
+            if (cause != null) kill.killOnce()
+        }
 
     // Setup sinks. Sink creation can throw (e.g. eager File sinks).
     var stdoutSink: Sink? = null
@@ -110,7 +121,9 @@ suspend fun execInternal(
                 // process won't be orphaned).
                 currentCoroutineContext().ensureActive()
                 Throwables.propagateIfNeeded(t, WORKER_THROWABLE_POLICY)
-                throw ExecException(ExecError.OutputSinkFailed(meta = meta, stream = StreamId.STDOUT, cause = t))
+                throw ExecException(
+                    ExecError.OutputSinkFailed(meta = meta, stream = StreamId.STDOUT, cause = t)
+                )
             }
         }
     (spec.stderr as? JvmExecSpec.StderrSpec.Pipe)
@@ -126,7 +139,9 @@ suspend fun execInternal(
                 // process won't be orphaned).
                 currentCoroutineContext().ensureActive()
                 Throwables.propagateIfNeeded(t, WORKER_THROWABLE_POLICY)
-                throw ExecException(ExecError.OutputSinkFailed(meta = meta, stream = StreamId.STDERR, cause = t))
+                throw ExecException(
+                    ExecError.OutputSinkFailed(meta = meta, stream = StreamId.STDERR, cause = t)
+                )
             }
         }
 
@@ -135,11 +150,15 @@ suspend fun execInternal(
     // Instead they return TaskOutcome(error?) and we throw only after sinks are finished.
     val stdoutJob =
         stdoutSink?.let { sink ->
-            async(ioDispatcher) { TaskOutcome(pumpStreamOutcome(proc.inputStream, sink, meta, StreamId.STDOUT, kill)) }
+            async(ioDispatcher) {
+                TaskOutcome(pumpStreamOutcome(proc.inputStream, sink, meta, StreamId.STDOUT, kill))
+            }
         }
     val stderrJob =
         stderrSink?.let { sink ->
-            async(ioDispatcher) { TaskOutcome(pumpStreamOutcome(proc.errorStream, sink, meta, StreamId.STDERR, kill)) }
+            async(ioDispatcher) {
+                TaskOutcome(pumpStreamOutcome(proc.errorStream, sink, meta, StreamId.STDERR, kill))
+            }
         }
     val stdinJob =
         if (stdinNeedsTask(spec.stdin)) {
@@ -160,7 +179,8 @@ suspend fun execInternal(
                 if (spec.timeout != null) {
                     withTimeoutOrNull(spec.timeout) { awaitExitSuspend(proc) } != null
                 } else {
-                    awaitExitSuspend(proc); true
+                    awaitExitSuspend(proc)
+                    true
                 }
             } catch (ce: CancellationException) {
                 // ensure kill happens (hook should do it, but be explicit)
@@ -218,7 +238,8 @@ suspend fun execInternal(
             return ok
         }
 
-        // First await; if it doesn't complete, killOnce() closes streams and we retry within the same deadline.
+        // First await; if it doesn't complete, killOnce() closes streams and we retry within the
+        // same deadline.
         val firstOk = awaitJobsOnce()
         if (!firstOk || pumpError != null) kill.killOnce()
         val secondOk = if (firstOk) true else awaitJobsOnce()
@@ -231,9 +252,7 @@ suspend fun execInternal(
         // that are trying to cancel us, letting ExitNonZero win purely due to scheduling.
         val (stdoutFinished, stderrFinished) =
             if (joinedAll) {
-                withContext(ioDispatcher) {
-                    stdoutSink?.finish() to stderrSink?.finish()
-                }
+                withContext(ioDispatcher) { stdoutSink?.finish() to stderrSink?.finish() }
             } else {
                 null to null
             }
@@ -256,14 +275,19 @@ suspend fun execInternal(
             if (proc.isAlive) {
                 val rem = cleanupDeadline.remainingMillis()
                 if (rem > 0L) {
-                    val done = withTimeoutOrNull(rem) { awaitExitSuspend(proc); true } ?: false
+                    val done =
+                        withTimeoutOrNull(rem) {
+                            awaitExitSuspend(proc)
+                            true
+                        } ?: false
                     if (done) exitValueOrNull(proc) else null
                 } else null
             } else {
                 exitValueOrNull(proc)
             }
 
-        // Match blocking runner precedence: if a pump caused failure (overflow/sink/consumer), report that.
+        // Match blocking runner precedence: if a pump caused failure (overflow/sink/consumer),
+        // report that.
         if (pumpError != null) {
             currentCoroutineContext().ensureActive()
             throw ExecException(pumpError.copyWithCaptures(captures))
@@ -277,7 +301,7 @@ suspend fun execInternal(
                     timeoutMs = spec.timeout?.inWholeMilliseconds ?: 0L,
                     exitCodeAfterKill = exitAfterKill,
                     captures = captures,
-                ),
+                )
             )
         }
 
@@ -287,17 +311,16 @@ suspend fun execInternal(
                 ExecError.CleanupFailed(
                     meta = meta,
                     cause = null,
-                    message = "Cleanup exceeded ${spec.cleanupTimeout.inWholeMilliseconds}ms (tasks did not finish)",
+                    message =
+                        "Cleanup exceeded ${spec.cleanupTimeout.inWholeMilliseconds}ms (tasks did not finish)",
                     captures = captures,
-                ),
+                )
             )
         }
 
         if (finishError != null) {
             currentCoroutineContext().ensureActive()
-            throw ExecException(
-                finishError.copyWithCaptures(captures),
-            )
+            throw ExecException(finishError.copyWithCaptures(captures))
         }
 
         val exit = exitValueOrNull(proc) ?: exitAfterKill ?: -1
@@ -316,11 +339,7 @@ suspend fun execInternal(
         if (spec.exitPolicy == ExitPolicy.ThrowOnNonZero && exit != 0) {
             currentCoroutineContext().ensureActive()
             throw ExecException(
-                ExecError.ExitNonZero(
-                    meta = meta,
-                    exitCode = exit,
-                    captures = captures,
-                ),
+                ExecError.ExitNonZero(meta = meta, exitCode = exit, captures = captures)
             )
         }
 

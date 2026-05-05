@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-Wabbit-Public-Test-License-1.1
+
 package one.wabbit.exec
 
 import java.nio.charset.StandardCharsets
@@ -11,18 +13,13 @@ import kotlin.system.exitProcess
  * This lives in test sources so it is available on the test runtime classpath and can be launched
  * by `java -cp <test classpath> one.wabbit.exec.FixtureMain ...`.
  *
- * Supported flags (order-independent):
- *   --pid-file <path>               Write current pid to a file.
- *   --child-pid-file <path>         Path for spawned child's pid file.
- *   --spawn-child-sleep-ms <ms>     Spawn a child FixtureMain that writes its pid and sleeps.
- *   --print-env <NAME>              Print env var value or "<null>" to stdout (with newline).
- *   --out <text>                    Write text to stdout (no newline).
- *   --err <text>                    Write text to stderr (no newline).
- *   --cat                           Read stdin fully and copy bytes to stdout.
- *   --spam-out <n>                  Write n bytes to stdout (patterned).
- *   --spam-err <n>                  Write n bytes to stderr (patterned).
- *   --sleep-ms <ms>                 Sleep before exiting.
- *   --exit <code>                   Exit code (default 0).
+ * Supported flags (order-independent): --pid-file <path> Write current pid to a file.
+ * --child-pid-file <path> Path for spawned child's pid file. --spawn-child-sleep-ms <ms> Spawn a
+ * child FixtureMain that writes its pid and sleeps. --print-env <NAME> Print env var value or
+ * "<null>" to stdout (with newline). --out <text> Write text to stdout (no newline). --err <text>
+ * Write text to stderr (no newline). --cat Read stdin fully and copy bytes to stdout. --spam-out
+ * <n> Write n bytes to stdout (patterned). --spam-err <n> Write n bytes to stderr (patterned).
+ * --sleep-ms <ms> Sleep before exiting. --exit <code> Exit code (default 0).
  */
 object FixtureMain {
     @JvmStatic
@@ -44,37 +41,48 @@ object FixtureMain {
         while (i < args.size) {
             when (val a = args[i]) {
                 "--pid-file" -> {
-                    pidFile = Path.of(args[i + 1]); i += 2
+                    pidFile = Path.of(args[i + 1])
+                    i += 2
                 }
                 "--child-pid-file" -> {
-                    childPidFile = Path.of(args[i + 1]); i += 2
+                    childPidFile = Path.of(args[i + 1])
+                    i += 2
                 }
                 "--spawn-child-sleep-ms" -> {
-                    spawnChildSleepMs = args[i + 1].toLong(); i += 2
+                    spawnChildSleepMs = args[i + 1].toLong()
+                    i += 2
                 }
                 "--print-env" -> {
-                    envPrints += args[i + 1]; i += 2
+                    envPrints += args[i + 1]
+                    i += 2
                 }
                 "--out" -> {
-                    outText = args[i + 1]; i += 2
+                    outText = args[i + 1]
+                    i += 2
                 }
                 "--err" -> {
-                    errText = args[i + 1]; i += 2
+                    errText = args[i + 1]
+                    i += 2
                 }
                 "--cat" -> {
-                    cat = true; i += 1
+                    cat = true
+                    i += 1
                 }
                 "--spam-out" -> {
-                    spamOut = args[i + 1].toInt(); i += 2
+                    spamOut = args[i + 1].toInt()
+                    i += 2
                 }
                 "--spam-err" -> {
-                    spamErr = args[i + 1].toInt(); i += 2
+                    spamErr = args[i + 1].toInt()
+                    i += 2
                 }
                 "--sleep-ms" -> {
-                    sleepMs = args[i + 1].toLong(); i += 2
+                    sleepMs = args[i + 1].toLong()
+                    i += 2
                 }
                 "--exit" -> {
-                    exit = args[i + 1].toInt(); i += 2
+                    exit = args[i + 1].toInt()
+                    i += 2
                 }
                 else -> {
                     System.err.write(("unknown arg: $a\n").toByteArray(StandardCharsets.UTF_8))
@@ -91,12 +99,17 @@ object FixtureMain {
 
         // Optional child spawn.
         if (spawnChildSleepMs != null) {
-            val childFile = requireNotNull(childPidFile) { "--child-pid-file required with --spawn-child-sleep-ms" }
+            val childFile =
+                requireNotNull(childPidFile) {
+                    "--child-pid-file required with --spawn-child-sleep-ms"
+                }
             spawnChild(childFile, spawnChildSleepMs!!)
             // Wait briefly for child pid file to appear (best-effort).
             val deadline = System.nanoTime() + 2_000_000_000L
             while (!Files.exists(childFile) && System.nanoTime() < deadline) {
-                try { Thread.sleep(10) } catch (_: InterruptedException) {}
+                try {
+                    Thread.sleep(10)
+                } catch (_: InterruptedException) {}
             }
         }
 
@@ -130,7 +143,9 @@ object FixtureMain {
         }
 
         if (sleepMs > 0) {
-            try { Thread.sleep(sleepMs) } catch (_: InterruptedException) {}
+            try {
+                Thread.sleep(sleepMs)
+            } catch (_: InterruptedException) {}
         }
 
         exitProcess(exit)
@@ -150,24 +165,30 @@ object FixtureMain {
 
     private fun spawnChild(pidFile: Path, sleepMs: Long) {
         val javaHome = Path.of(System.getProperty("java.home"))
-        val exe = if (System.getProperty("os.name").lowercase().contains("win")) "java.exe" else "java"
+        val exe =
+            if (System.getProperty("os.name").lowercase().contains("win")) "java.exe" else "java"
         val javaExe = javaHome.resolve("bin").resolve(exe).toString()
 
         val cp = System.getProperty("java.class.path")
-        val cpLine = if (cp.any { it.isWhitespace() } || cp.contains('"')) "\"${cp.replace("\"", "\\\"")}\"" else cp
-        val argFile = Files.createTempFile("fixture-child-cp-", ".args").also { it.toFile().deleteOnExit() }
+        val cpLine =
+            if (cp.any { it.isWhitespace() } || cp.contains('"')) "\"${cp.replace("\"", "\\\"")}\""
+            else cp
+        val argFile =
+            Files.createTempFile("fixture-child-cp-", ".args").also { it.toFile().deleteOnExit() }
         Files.writeString(
             argFile,
             "-cp\n$cpLine\none.wabbit.exec.FixtureMain\n",
-            StandardCharsets.UTF_8
+            StandardCharsets.UTF_8,
         )
 
         val argv =
             listOf(
                 javaExe,
                 "@${argFile.toString()}",
-                "--pid-file", pidFile.toString(),
-                "--sleep-ms", sleepMs.toString(),
+                "--pid-file",
+                pidFile.toString(),
+                "--sleep-ms",
+                sleepMs.toString(),
             )
 
         ProcessBuilder(argv)

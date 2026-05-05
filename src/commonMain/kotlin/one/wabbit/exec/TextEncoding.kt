@@ -1,22 +1,16 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 package one.wabbit.exec
 
-/**
- * Portable text encoding descriptor used by common stdin and capture APIs.
- */
+/** Portable text encoding descriptor used by common stdin and capture APIs. */
 sealed interface TextEncoding {
-    /**
-     * UTF-8 text encoding.
-     */
+    /** UTF-8 text encoding. */
     data object Utf8 : TextEncoding
 
-    /**
-     * US-ASCII text encoding.
-     */
+    /** US-ASCII text encoding. */
     data object Ascii : TextEncoding
 
-    /**
-     * ISO-8859-1 text encoding.
-     */
+    /** ISO-8859-1 text encoding. */
     data object Latin1 : TextEncoding
 
     /**

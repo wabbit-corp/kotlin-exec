@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 @file:OptIn(PlatformSpecificExecApi::class)
 
 package one.wabbit.exec
@@ -23,27 +25,24 @@ import one.wabbit.throwables.Throwables
  */
 @PlatformSpecificExecApi
 sealed interface VirtualThreadsPolicy {
-    /**
-     * Always use platform threads created by `kotlin-exec`.
-     */
+    /** Always use platform threads created by `kotlin-exec`. */
     data object Never : VirtualThreadsPolicy
 
     /**
-     * Use virtual threads when the current JDK exposes them, otherwise fall back to platform threads.
+     * Use virtual threads when the current JDK exposes them, otherwise fall back to platform
+     * threads.
      */
     data object Prefer : VirtualThreadsPolicy
 
-    /**
-     * Require virtual threads and fail if the current JDK does not expose them.
-     */
+    /** Require virtual threads and fail if the current JDK does not expose them. */
     data object Require : VirtualThreadsPolicy
 }
 
 /**
  * JVM escape hatch for callers that genuinely need the underlying [Process].
  *
- * Prefer the portable [RunningProcess] API whenever possible. Downcast to this
- * only when you need JVM-specific integration that `kotlin-exec` does not model.
+ * Prefer the portable [RunningProcess] API whenever possible. Downcast to this only when you need
+ * JVM-specific integration that `kotlin-exec` does not model.
  */
 @PlatformSpecificExecApi
 interface JvmRunningProcess : RunningProcess {
@@ -56,12 +55,11 @@ interface JvmRunningProcess : RunningProcess {
 }
 
 /**
- * JVM-only spec for the remaining execution features that are not portable today:
- * charset-specific text input, writer-backed stdin, stream-backed stdin, and
- * direct `java.nio.file.Path` interop.
+ * JVM-only spec for the remaining execution features that are not portable today: charset-specific
+ * text input, writer-backed stdin, stream-backed stdin, and direct `java.nio.file.Path` interop.
  *
- * Prefer [ExecSpec] whenever you only need `argv`, `cwd`, env, UTF-8/common
- * stdin variants, common sinks, file sinks, timeout, shutdown, and exit policy.
+ * Prefer [ExecSpec] whenever you only need `argv`, `cwd`, env, UTF-8/common stdin variants, common
+ * sinks, file sinks, timeout, shutdown, and exit policy.
  *
  * @property argv command and arguments. The list must be non-empty.
  * @property cwd optional JVM working directory.
@@ -87,18 +85,12 @@ data class JvmExecSpec(
     val cleanupTimeout: Duration = defaultCleanupTimeout,
     val exitPolicy: ExitPolicy = defaultExitPolicy,
 ) {
-    /**
-     * JVM-aware stdin source for managed execution.
-     */
+    /** JVM-aware stdin source for managed execution. */
     sealed interface Input {
-        /**
-         * Close child stdin immediately.
-         */
+        /** Close child stdin immediately. */
         data object None : Input
 
-        /**
-         * Inherit stdin from the parent process.
-         */
+        /** Inherit stdin from the parent process. */
         data object Inherit : Input
 
         /**
@@ -114,10 +106,7 @@ data class JvmExecSpec(
          * @property text complete text stdin payload.
          * @property charset JVM charset used to produce bytes.
          */
-        data class Text(
-            val text: String,
-            val charset: Charset = StandardCharsets.UTF_8,
-        ) : Input
+        data class Text(val text: String, val charset: Charset = StandardCharsets.UTF_8) : Input
 
         /**
          * Open a `kotlinx-io` source, copy it to child stdin, and close both streams.
@@ -155,9 +144,7 @@ data class JvmExecSpec(
         data class FromStream(val open: () -> InputStream) : Input
     }
 
-    /**
-     * JVM-aware destination for a piped stdout or stderr stream.
-     */
+    /** JVM-aware destination for a piped stdout or stderr stream. */
     sealed interface SinkSpec {
         /**
          * Capture output in memory.
@@ -177,8 +164,8 @@ data class JvmExecSpec(
          *
          * @property onChunk callback receiving `(buffer, offset, length)`.
          * @property copyChunks copy each delivered chunk before invoking [onChunk].
-         * @property maxBytes optional byte limit for callback delivery. Must be greater than zero when
-         * set.
+         * @property maxBytes optional byte limit for callback delivery. Must be greater than zero
+         *   when set.
          * @property overflow behavior when [maxBytes] is exceeded.
          */
         data class Stream(
@@ -206,8 +193,8 @@ data class JvmExecSpec(
          *
          * @property path output path.
          * @property write append/truncate and eager/lazy opening policy.
-         * @property maxBytes optional maximum bytes written during this run. Must be greater than zero
-         * when set.
+         * @property maxBytes optional maximum bytes written during this run. Must be greater than
+         *   zero when set.
          * @property overflow behavior when [maxBytes] is exceeded.
          */
         data class File(
@@ -220,8 +207,8 @@ data class JvmExecSpec(
         /**
          * Send the same output stream to multiple sinks.
          *
-         * The [primary] sink determines captured bytes and stats returned in [ExecResult]. [branches]
-         * are side-effect sinks.
+         * The [primary] sink determines captured bytes and stats returned in [ExecResult].
+         * [branches] are side-effect sinks.
          *
          * @property primary sink whose capture is reported.
          * @property branches additional sinks that receive the same chunks.
@@ -229,18 +216,12 @@ data class JvmExecSpec(
         data class Tee(val primary: SinkSpec, val branches: List<SinkSpec>) : SinkSpec
     }
 
-    /**
-     * Stdout routing for JVM managed execution.
-     */
+    /** Stdout routing for JVM managed execution. */
     sealed interface StdoutSpec {
-        /**
-         * Inherit stdout from the parent process.
-         */
+        /** Inherit stdout from the parent process. */
         data object Inherit : StdoutSpec
 
-        /**
-         * Discard stdout.
-         */
+        /** Discard stdout. */
         data object Discard : StdoutSpec
 
         /**
@@ -251,18 +232,12 @@ data class JvmExecSpec(
         data class Pipe(val sink: SinkSpec) : StdoutSpec
     }
 
-    /**
-     * Stderr routing for JVM managed execution.
-     */
+    /** Stderr routing for JVM managed execution. */
     sealed interface StderrSpec {
-        /**
-         * Inherit stderr from the parent process.
-         */
+        /** Inherit stderr from the parent process. */
         data object Inherit : StderrSpec
 
-        /**
-         * Discard stderr.
-         */
+        /** Discard stderr. */
         data object Discard : StderrSpec
 
         /**
@@ -272,46 +247,32 @@ data class JvmExecSpec(
          */
         data class Pipe(val sink: SinkSpec) : StderrSpec
 
-        /**
-         * Merge stderr into stdout using [ProcessBuilder.redirectErrorStream].
-         */
+        /** Merge stderr into stdout using [ProcessBuilder.redirectErrorStream]. */
         data object ToStdout : StderrSpec
     }
 
     companion object {
-        /**
-         * Default environment policy: inherit parent environment without changes.
-         */
+        /** Default environment policy: inherit parent environment without changes. */
         val defaultEnvPolicy = ExecSpec.defaultEnvPolicy
 
-        /**
-         * Default stdin: close child stdin immediately.
-         */
+        /** Default stdin: close child stdin immediately. */
         val defaultStdinSpec = Input.None
 
-        /**
-         * Default stdout: capture the first 4 MiB in memory.
-         */
-        val defaultStdoutSpec = StdoutSpec.Pipe(SinkSpec.Capture(maxBytes = 4 * 1024 * 1024, keep = ExecSpec.Keep.Head))
+        /** Default stdout: capture the first 4 MiB in memory. */
+        val defaultStdoutSpec =
+            StdoutSpec.Pipe(SinkSpec.Capture(maxBytes = 4 * 1024 * 1024, keep = ExecSpec.Keep.Head))
 
-        /**
-         * Default stderr: capture the last 256 KiB in memory.
-         */
-        val defaultStderrSpec = StderrSpec.Pipe(SinkSpec.Capture(maxBytes = 256 * 1024, keep = ExecSpec.Keep.Tail))
+        /** Default stderr: capture the last 256 KiB in memory. */
+        val defaultStderrSpec =
+            StderrSpec.Pipe(SinkSpec.Capture(maxBytes = 256 * 1024, keep = ExecSpec.Keep.Tail))
 
-        /**
-         * Default shutdown policy inherited from [ExecSpec.defaultShutdownPolicy].
-         */
+        /** Default shutdown policy inherited from [ExecSpec.defaultShutdownPolicy]. */
         val defaultShutdownPolicy = ExecSpec.defaultShutdownPolicy
 
-        /**
-         * Default cleanup budget inherited from [ExecSpec.defaultCleanupTimeout].
-         */
+        /** Default cleanup budget inherited from [ExecSpec.defaultCleanupTimeout]. */
         val defaultCleanupTimeout: Duration = ExecSpec.defaultCleanupTimeout
 
-        /**
-         * Default exit handling inherited from [ExecSpec.defaultExitPolicy].
-         */
+        /** Default exit handling inherited from [ExecSpec.defaultExitPolicy]. */
         val defaultExitPolicy = ExecSpec.defaultExitPolicy
 
         /**
@@ -346,8 +307,14 @@ data class JvmExecSpec(
                 cwd = cwd,
                 env = env,
                 stdin = stdin,
-                stdout = StdoutSpec.Pipe(SinkSpec.Capture(maxBytes = stdoutMaxBytes, keep = ExecSpec.Keep.Head)),
-                stderr = StderrSpec.Pipe(SinkSpec.Capture(maxBytes = stderrTailBytes, keep = ExecSpec.Keep.Tail)),
+                stdout =
+                    StdoutSpec.Pipe(
+                        SinkSpec.Capture(maxBytes = stdoutMaxBytes, keep = ExecSpec.Keep.Head)
+                    ),
+                stderr =
+                    StderrSpec.Pipe(
+                        SinkSpec.Capture(maxBytes = stderrTailBytes, keep = ExecSpec.Keep.Tail)
+                    ),
                 timeout = timeout,
                 shutdown = shutdown,
                 cleanupTimeout = cleanupTimeout,
@@ -359,8 +326,8 @@ data class JvmExecSpec(
 /**
  * JVM-only spawn spec kept for legacy `java.nio.file.Path` interop.
  *
- * [SpawnSpec] already covers the portable spawn surface: `argv`, `cwd`, env,
- * inherit/discard stdio, file redirects, and shutdown behavior.
+ * [SpawnSpec] already covers the portable spawn surface: `argv`, `cwd`, env, inherit/discard stdio,
+ * file redirects, and shutdown behavior.
  *
  * @property argv command and arguments. The list must be non-empty.
  * @property cwd optional JVM working directory.
@@ -380,33 +347,21 @@ data class JvmSpawnSpec(
     val stderr: StderrSpec = StderrSpec.Discard,
     val shutdown: ShutdownPolicy = ShutdownPolicy.TerminateThenKillTree(500.milliseconds),
 ) {
-    /**
-     * Stdin behavior for JVM spawned processes.
-     */
+    /** Stdin behavior for JVM spawned processes. */
     sealed interface Input {
-        /**
-         * Close child stdin immediately.
-         */
+        /** Close child stdin immediately. */
         data object None : Input
 
-        /**
-         * Inherit stdin from the parent process.
-         */
+        /** Inherit stdin from the parent process. */
         data object Inherit : Input
     }
 
-    /**
-     * Stdout routing for JVM spawned processes.
-     */
+    /** Stdout routing for JVM spawned processes. */
     sealed interface StdoutSpec {
-        /**
-         * Inherit stdout from the parent process.
-         */
+        /** Inherit stdout from the parent process. */
         data object Inherit : StdoutSpec
 
-        /**
-         * Discard stdout.
-         */
+        /** Discard stdout. */
         data object Discard : StdoutSpec
 
         /**
@@ -418,18 +373,12 @@ data class JvmSpawnSpec(
         data class File(val path: Path, val append: Boolean = false) : StdoutSpec
     }
 
-    /**
-     * Stderr routing for JVM spawned processes.
-     */
+    /** Stderr routing for JVM spawned processes. */
     sealed interface StderrSpec {
-        /**
-         * Inherit stderr from the parent process.
-         */
+        /** Inherit stderr from the parent process. */
         data object Inherit : StderrSpec
 
-        /**
-         * Discard stderr.
-         */
+        /** Discard stderr. */
         data object Discard : StderrSpec
 
         /**
@@ -440,16 +389,12 @@ data class JvmSpawnSpec(
          */
         data class File(val path: Path, val append: Boolean = false) : StderrSpec
 
-        /**
-         * Merge stderr into stdout using [ProcessBuilder.redirectErrorStream].
-         */
+        /** Merge stderr into stdout using [ProcessBuilder.redirectErrorStream]. */
         data object ToStdout : StderrSpec
     }
 }
 
-/**
- * JVM implementation of the common [Exec] process execution entry point.
- */
+/** JVM implementation of the common [Exec] process execution entry point. */
 actual object Exec {
     /**
      * Run [spec] as a managed process from a coroutine on the JVM.
@@ -460,10 +405,7 @@ actual object Exec {
      * @throws ExecException for structured execution failures.
      */
     @Throws(ExecException::class)
-    actual suspend fun exec(
-        spec: ExecSpec,
-        ioDispatcher: CoroutineDispatcher,
-    ): ExecResult =
+    actual suspend fun exec(spec: ExecSpec, ioDispatcher: CoroutineDispatcher): ExecResult =
         execInternal(spec.toJvmSpecOrThrow(), ioDispatcher = ioDispatcher)
 
     /**
@@ -479,8 +421,10 @@ actual object Exec {
      */
     @Throws(ExecException::class)
     @PlatformSpecificExecApi
-    suspend fun exec(spec: JvmExecSpec, ioDispatcher: CoroutineDispatcher = Dispatchers.IO): ExecResult =
-        execInternal(spec, ioDispatcher = ioDispatcher)
+    suspend fun exec(
+        spec: JvmExecSpec,
+        ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    ): ExecResult = execInternal(spec, ioDispatcher = ioDispatcher)
 
     /**
      * Run [spec] as a managed process and block the current thread.
@@ -496,7 +440,8 @@ actual object Exec {
         execBlockingInternal(spec.toJvmSpecOrThrow(), virtualThreads = VirtualThreadsPolicy.Prefer)
 
     /**
-     * Run [spec] as a managed process and block the current thread with explicit virtual-thread policy.
+     * Run [spec] as a managed process and block the current thread with explicit virtual-thread
+     * policy.
      *
      * @param spec complete portable execution specification.
      * @param virtualThreads virtual-thread usage policy for blocking I/O workers.
@@ -505,8 +450,10 @@ actual object Exec {
      */
     @Throws(ExecException::class)
     @PlatformSpecificExecApi
-    fun execBlocking(spec: ExecSpec, virtualThreads: VirtualThreadsPolicy = VirtualThreadsPolicy.Prefer): ExecResult =
-        execBlockingInternal(spec.toJvmSpecOrThrow(), virtualThreads = virtualThreads)
+    fun execBlocking(
+        spec: ExecSpec,
+        virtualThreads: VirtualThreadsPolicy = VirtualThreadsPolicy.Prefer,
+    ): ExecResult = execBlockingInternal(spec.toJvmSpecOrThrow(), virtualThreads = virtualThreads)
 
     /**
      * Run a JVM-specific managed process spec and block the current thread.
@@ -518,8 +465,10 @@ actual object Exec {
      */
     @Throws(ExecException::class)
     @PlatformSpecificExecApi
-    fun execBlocking(spec: JvmExecSpec, virtualThreads: VirtualThreadsPolicy = VirtualThreadsPolicy.Prefer): ExecResult =
-        execBlockingInternal(spec, virtualThreads = virtualThreads)
+    fun execBlocking(
+        spec: JvmExecSpec,
+        virtualThreads: VirtualThreadsPolicy = VirtualThreadsPolicy.Prefer,
+    ): ExecResult = execBlockingInternal(spec, virtualThreads = virtualThreads)
 
     /**
      * Spawn a portable process from a coroutine and return a running handle.
@@ -530,10 +479,7 @@ actual object Exec {
      * @throws ExecException when process configuration or startup fails.
      */
     @Throws(ExecException::class)
-    actual suspend fun spawn(
-        spec: SpawnSpec,
-        ioDispatcher: CoroutineDispatcher,
-    ): RunningProcess =
+    actual suspend fun spawn(spec: SpawnSpec, ioDispatcher: CoroutineDispatcher): RunningProcess =
         spawnInternal(spec.toJvmSpecOrThrow(), ioDispatcher = ioDispatcher)
 
     /**
@@ -549,8 +495,7 @@ actual object Exec {
     suspend fun spawn(
         spec: JvmSpawnSpec,
         ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    ): RunningProcess =
-        spawnInternal(spec, ioDispatcher = ioDispatcher)
+    ): RunningProcess = spawnInternal(spec, ioDispatcher = ioDispatcher)
 
     /**
      * Spawn a portable process from a blocking call and return a running handle.
@@ -572,8 +517,7 @@ actual object Exec {
      */
     @Throws(ExecException::class)
     @PlatformSpecificExecApi
-    fun spawnBlocking(spec: JvmSpawnSpec): RunningProcess =
-        spawnBlockingInternal(spec)
+    fun spawnBlocking(spec: JvmSpawnSpec): RunningProcess = spawnBlockingInternal(spec)
 
     /**
      * Convenience overload for portable managed coroutine execution.
@@ -761,7 +705,6 @@ actual object Exec {
             ),
             virtualThreads = virtualThreads,
         )
-
 }
 
 /**
@@ -772,10 +715,7 @@ actual object Exec {
  * @return decoded text.
  */
 @PlatformSpecificExecApi
-fun ExecResult.Captured.text(
-    charset: Charset,
-    trimLineEndings: Boolean = true,
-): String {
+fun ExecResult.Captured.text(charset: Charset, trimLineEndings: Boolean = true): String {
     return text(TextEncoding.Named(charset.name()), trimLineEndings = trimLineEndings)
 }
 
@@ -801,7 +741,10 @@ suspend fun Exec.execOutcome(spec: JvmExecSpec): ExecOutcome =
  * @return success or structured failure.
  */
 @PlatformSpecificExecApi
-fun Exec.execBlockingOutcome(spec: JvmExecSpec, virtualThreads: VirtualThreadsPolicy = VirtualThreadsPolicy.Prefer): ExecOutcome =
+fun Exec.execBlockingOutcome(
+    spec: JvmExecSpec,
+    virtualThreads: VirtualThreadsPolicy = VirtualThreadsPolicy.Prefer,
+): ExecOutcome =
     try {
         ExecOutcome.Success(execBlocking(spec, virtualThreads = virtualThreads))
     } catch (e: ExecException) {
@@ -825,10 +768,7 @@ internal fun ExecSpec.toJvmSpecOrThrow(): JvmExecSpec =
     } catch (t: Throwable) {
         Throwables.propagateIfNeeded(t)
         throw ExecException(
-            ExecError.ConfigureFailed(
-                meta = ExecResult.Meta(argv = argv),
-                cause = t,
-            )
+            ExecError.ConfigureFailed(meta = ExecResult.Meta(argv = argv), cause = t)
         )
     }
 
@@ -860,21 +800,29 @@ private fun ExecSpec.StderrSpec.toJvmStderr(): JvmExecSpec.StderrSpec =
 
 private fun ExecSpec.SinkSpec.toJvmSink(): JvmExecSpec.SinkSpec =
     when (this) {
-        is ExecSpec.SinkSpec.Capture -> JvmExecSpec.SinkSpec.Capture(maxBytes = maxBytes, keep = keep, overflow = overflow)
-        is ExecSpec.SinkSpec.Stream -> JvmExecSpec.SinkSpec.Stream(
-            onChunk = onChunk,
-            copyChunks = copyChunks,
-            maxBytes = maxBytes,
-            overflow = overflow,
-        )
-        is ExecSpec.SinkSpec.WriteTo -> JvmExecSpec.SinkSpec.WriteTo(open = open, maxBytes = maxBytes, overflow = overflow)
-        is ExecSpec.SinkSpec.File -> JvmExecSpec.SinkSpec.File(
-            path = nioPathOf(path),
-            write = write,
-            maxBytes = maxBytes,
-            overflow = overflow,
-        )
-        is ExecSpec.SinkSpec.Tee -> JvmExecSpec.SinkSpec.Tee(primary = primary.toJvmSink(), branches = branches.map { it.toJvmSink() })
+        is ExecSpec.SinkSpec.Capture ->
+            JvmExecSpec.SinkSpec.Capture(maxBytes = maxBytes, keep = keep, overflow = overflow)
+        is ExecSpec.SinkSpec.Stream ->
+            JvmExecSpec.SinkSpec.Stream(
+                onChunk = onChunk,
+                copyChunks = copyChunks,
+                maxBytes = maxBytes,
+                overflow = overflow,
+            )
+        is ExecSpec.SinkSpec.WriteTo ->
+            JvmExecSpec.SinkSpec.WriteTo(open = open, maxBytes = maxBytes, overflow = overflow)
+        is ExecSpec.SinkSpec.File ->
+            JvmExecSpec.SinkSpec.File(
+                path = nioPathOf(path),
+                write = write,
+                maxBytes = maxBytes,
+                overflow = overflow,
+            )
+        is ExecSpec.SinkSpec.Tee ->
+            JvmExecSpec.SinkSpec.Tee(
+                primary = primary.toJvmSink(),
+                branches = branches.map { it.toJvmSink() },
+            )
     }
 
 private fun SpawnSpec.toJvmSpecOrThrow(): JvmSpawnSpec =
@@ -892,13 +840,21 @@ private fun SpawnSpec.toJvmSpecOrThrow(): JvmSpawnSpec =
                 when (val out = stdout) {
                     SpawnSpec.StdoutSpec.Inherit -> JvmSpawnSpec.StdoutSpec.Inherit
                     SpawnSpec.StdoutSpec.Discard -> JvmSpawnSpec.StdoutSpec.Discard
-                    is SpawnSpec.StdoutSpec.File -> JvmSpawnSpec.StdoutSpec.File(path = nioPathOf(out.path), append = out.append)
+                    is SpawnSpec.StdoutSpec.File ->
+                        JvmSpawnSpec.StdoutSpec.File(
+                            path = nioPathOf(out.path),
+                            append = out.append,
+                        )
                 },
             stderr =
                 when (val err = stderr) {
                     SpawnSpec.StderrSpec.Inherit -> JvmSpawnSpec.StderrSpec.Inherit
                     SpawnSpec.StderrSpec.Discard -> JvmSpawnSpec.StderrSpec.Discard
-                    is SpawnSpec.StderrSpec.File -> JvmSpawnSpec.StderrSpec.File(path = nioPathOf(err.path), append = err.append)
+                    is SpawnSpec.StderrSpec.File ->
+                        JvmSpawnSpec.StderrSpec.File(
+                            path = nioPathOf(err.path),
+                            append = err.append,
+                        )
                     SpawnSpec.StderrSpec.ToStdout -> JvmSpawnSpec.StderrSpec.ToStdout
                 },
             shutdown = shutdown,
@@ -906,9 +862,6 @@ private fun SpawnSpec.toJvmSpecOrThrow(): JvmSpawnSpec =
     } catch (t: Throwable) {
         Throwables.propagateIfNeeded(t)
         throw ExecException(
-            ExecError.ConfigureFailed(
-                meta = ExecResult.Meta(argv = argv),
-                cause = t,
-            )
+            ExecError.ConfigureFailed(meta = ExecResult.Meta(argv = argv), cause = t)
         )
     }

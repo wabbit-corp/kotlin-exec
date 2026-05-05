@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 @file:OptIn(PlatformSpecificExecApi::class)
 
 package one.wabbit.exec
 
-import one.wabbit.throwables.Throwables
+import java.util.concurrent.TimeUnit
+import kotlin.time.Duration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -10,9 +13,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.concurrent.TimeUnit
-import kotlin.time.Duration
-
+import one.wabbit.throwables.Throwables
 
 /**
  * JVM [RunningProcess] implementation returned by spawn APIs.
@@ -23,13 +24,17 @@ import kotlin.time.Duration
  *
  * @property meta command metadata for the spawned process.
  */
-class RunningProcessImpl internal constructor(
+class RunningProcessImpl
+internal constructor(
     val meta: ExecResult.Meta,
     private val process: Process,
     private val kill: KillSwitch,
-): JvmRunningProcess {
-    override val pid: Long? get() = meta.pid
-    override val rawProcess: Process get() = process
+) : JvmRunningProcess {
+    override val pid: Long?
+        get() = meta.pid
+
+    override val rawProcess: Process
+        get() = process
 
     override fun isAlive(): Boolean = process.isAlive
 
@@ -42,8 +47,8 @@ class RunningProcessImpl internal constructor(
     }
 
     /**
-     * Wait for exit; returns a richer outcome (distinguishes timeout vs interrupt).
-     * Does NOT kill on timeout/interrupt.
+     * Wait for exit; returns a richer outcome (distinguishes timeout vs interrupt). Does NOT kill
+     * on timeout/interrupt.
      */
     override fun awaitExitBlockingOutcome(timeout: Duration?): AwaitExitOutcome =
         try {
@@ -66,20 +71,28 @@ class RunningProcessImpl internal constructor(
             }
         }
 
-    /** Wait for exit; returns null if still running after [timeout]. Does NOT kill on timeout/interrupt. */
+    /**
+     * Wait for exit; returns null if still running after [timeout]. Does NOT kill on
+     * timeout/interrupt.
+     */
     override fun awaitExitBlocking(timeout: Duration?): ExitCode? =
         when (val o = awaitExitBlockingOutcome(timeout)) {
             is AwaitExitOutcome.Exited -> o.code
-            AwaitExitOutcome.TimedOut, AwaitExitOutcome.Interrupted -> null
+            AwaitExitOutcome.TimedOut,
+            AwaitExitOutcome.Interrupted -> null
         }
 
     /** Wait for exit; returns null if still running after [timeout]. Does NOT kill on timeout. */
     override suspend fun awaitExitOutcome(timeout: Duration?): AwaitExitOutcome {
         val done =
             if (timeout != null) {
-                withTimeoutOrNull(timeout) { awaitExitSuspend(process); true } ?: false
+                withTimeoutOrNull(timeout) {
+                    awaitExitSuspend(process)
+                    true
+                } ?: false
             } else {
-                awaitExitSuspend(process); true
+                awaitExitSuspend(process)
+                true
             }
         return if (!done) AwaitExitOutcome.TimedOut
         else AwaitExitOutcome.Exited(ExitCode(exitValueOrNull(process) ?: -1))
@@ -90,7 +103,8 @@ class RunningProcessImpl internal constructor(
     override suspend fun awaitExit(timeout: Duration?): ExitCode? =
         when (val o = awaitExitOutcome(timeout)) {
             is AwaitExitOutcome.Exited -> o.code
-            AwaitExitOutcome.TimedOut, AwaitExitOutcome.Interrupted -> null
+            AwaitExitOutcome.TimedOut,
+            AwaitExitOutcome.Interrupted -> null
         }
 }
 
@@ -116,7 +130,12 @@ internal fun spawnBlockingInternal(spec: JvmSpawnSpec): RunningProcessImpl {
         }
 
     val meta = baseMeta.copy(pid = pidOrNull(proc))
-    val kill = KillSwitch(proc, closeStdinOnKill = spec.stdin != JvmSpawnSpec.Input.Inherit, shutdown = spec.shutdown)
+    val kill =
+        KillSwitch(
+            proc,
+            closeStdinOnKill = spec.stdin != JvmSpawnSpec.Input.Inherit,
+            shutdown = spec.shutdown,
+        )
 
     // If we didn't inherit stdin, close it immediately to avoid children hanging on stdin reads.
     if (spec.stdin == JvmSpawnSpec.Input.None) closeQuietly(proc.outputStream)
@@ -144,8 +163,10 @@ internal suspend fun spawnInternal(
             throw ExecException(ExecError.ConfigureFailed(meta = baseMeta, cause = t))
         }
 
-    // Spawn in IO context, but guard against the cancellation race that can orphan a started process:
-    // cancellation can happen during/around pb.start(), and withContext may throw CancellationException
+    // Spawn in IO context, but guard against the cancellation race that can orphan a started
+    // process:
+    // cancellation can happen during/around pb.start(), and withContext may throw
+    // CancellationException
     // *after* the process is created but *before* we return its handle.
     val proc =
         withContext(ioDispatcher) {
@@ -170,7 +191,12 @@ internal suspend fun spawnInternal(
         }
 
     val meta = baseMeta.copy(pid = pidOrNull(proc))
-    val kill = KillSwitch(proc, closeStdinOnKill = spec.stdin != JvmSpawnSpec.Input.Inherit, shutdown = spec.shutdown)
+    val kill =
+        KillSwitch(
+            proc,
+            closeStdinOnKill = spec.stdin != JvmSpawnSpec.Input.Inherit,
+            shutdown = spec.shutdown,
+        )
 
     try {
         if (spec.stdin == JvmSpawnSpec.Input.None) closeQuietly(proc.outputStream)
@@ -211,7 +237,9 @@ internal fun buildProcessBuilder(spec: JvmSpawnSpec): ProcessBuilder {
         JvmSpawnSpec.StdoutSpec.Discard -> pb.redirectOutput(ProcessBuilder.Redirect.DISCARD)
         is JvmSpawnSpec.StdoutSpec.File -> {
             val f = fileOf(o.path)
-            pb.redirectOutput(if (o.append) ProcessBuilder.Redirect.appendTo(f) else ProcessBuilder.Redirect.to(f))
+            pb.redirectOutput(
+                if (o.append) ProcessBuilder.Redirect.appendTo(f) else ProcessBuilder.Redirect.to(f)
+            )
         }
     }
 
@@ -234,7 +262,9 @@ internal fun buildProcessBuilder(spec: JvmSpawnSpec): ProcessBuilder {
         is JvmSpawnSpec.StderrSpec.File -> {
             pb.redirectErrorStream(false)
             val f = fileOf(e.path)
-            pb.redirectError(if (e.append) ProcessBuilder.Redirect.appendTo(f) else ProcessBuilder.Redirect.to(f))
+            pb.redirectError(
+                if (e.append) ProcessBuilder.Redirect.appendTo(f) else ProcessBuilder.Redirect.to(f)
+            )
         }
     }
 

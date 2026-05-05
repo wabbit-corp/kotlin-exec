@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 package one.wabbit.exec
 
 import kotlin.jvm.JvmInline
@@ -19,24 +21,19 @@ import kotlinx.io.files.Path
  */
 @JvmInline value class ExitCode(val value: Int)
 
-/**
- * Controls how non-zero process exits are represented.
- */
+/** Controls how non-zero process exits are represented. */
 enum class ExitPolicy {
-    /**
-     * Return an [ExecResult] for any process exit code.
-     */
+    /** Return an [ExecResult] for any process exit code. */
     Return,
 
     /**
-     * Throw [ExecException] with [ExecError.ExitNonZero] when the process exits with a non-zero code.
+     * Throw [ExecException] with [ExecError.ExitNonZero] when the process exits with a non-zero
+     * code.
      */
     ThrowOnNonZero,
 }
 
-/**
- * Defines the environment visible to a spawned process.
- */
+/** Defines the environment visible to a spawned process. */
 sealed interface EnvPolicy {
     /**
      * Inherit the parent process environment and then apply [overlay].
@@ -50,30 +47,28 @@ sealed interface EnvPolicy {
      * [base].
      *
      * The minimal environment keeps basic process launching working, such as `PATH` and temporary
-     * directory variables on Unix-like systems and `SystemRoot`, `ComSpec`, `PATH`, `PATHEXT`, `TEMP`,
-     * and `TMP` on Windows.
+     * directory variables on Unix-like systems and `SystemRoot`, `ComSpec`, `PATH`, `PATHEXT`,
+     * `TEMP`, and `TMP` on Windows.
      *
-     * @property base variables that replace or add entries after the minimal environment is installed.
+     * @property base variables that replace or add entries after the minimal environment is
+     *   installed.
      */
     data class Hermetic(val base: Map<String, String> = emptyMap()) : EnvPolicy
 
     /**
      * Clear the parent process environment and use exactly [base].
      *
-     * Use this only when the target command can run without platform helper variables such as `PATH`.
+     * Use this only when the target command can run without platform helper variables such as
+     * `PATH`.
      *
      * @property base complete environment for the child process.
      */
     data class ClearAndSet(val base: Map<String, String> = emptyMap()) : EnvPolicy
 }
 
-/**
- * Controls how `kotlin-exec` terminates a process tree it owns.
- */
+/** Controls how `kotlin-exec` terminates a process tree it owns. */
 sealed interface ShutdownPolicy {
-    /**
-     * Force-kill the process tree immediately.
-     */
+    /** Force-kill the process tree immediately. */
     data object KillTree : ShutdownPolicy
 
     /**
@@ -87,16 +82,14 @@ sealed interface ShutdownPolicy {
     data class TerminateThenKillTree(val grace: Duration = 500.milliseconds) : ShutdownPolicy
 }
 
-/**
- * Controls how [ExecSpec.SinkSpec.File] opens an output file.
- */
+/** Controls how [ExecSpec.SinkSpec.File] opens an output file. */
 sealed interface FileWritePolicy {
     /**
      * Whether the file is opened at process-start time instead of on the first output byte.
      *
      * Eager opening surfaces file errors before the process can run and, for truncate mode, removes
-     * stale content even when the command emits no output. Lazy opening can avoid creating files for
-     * commands that produce no output.
+     * stale content even when the command emits no output. Lazy opening can avoid creating files
+     * for commands that produce no output.
      */
     val eager: Boolean
 
@@ -124,17 +117,17 @@ sealed interface FileWritePolicy {
  * process tree is terminated with [shutdown].
  *
  * @property argv command and arguments. The list must be non-empty; `argv[0]` is passed directly to
- * the platform process launcher.
+ *   the platform process launcher.
  * @property cwd optional working directory.
  * @property env environment policy for the child process.
  * @property stdin stdin source. [Input.None] closes stdin immediately.
  * @property stdout stdout routing. The default captures the first 4 MiB.
  * @property stderr stderr routing. The default captures the last 256 KiB.
  * @property timeout maximum time to wait for process exit, or `null` to wait without a run timeout.
- * @property shutdown process-tree termination policy used for timeout, cancellation, and output-limit
- * failures.
- * @property cleanupTimeout maximum time spent joining I/O tasks and cleanup after the process exits or
- * is terminated.
+ * @property shutdown process-tree termination policy used for timeout, cancellation, and
+ *   output-limit failures.
+ * @property cleanupTimeout maximum time spent joining I/O tasks and cleanup after the process exits
+ *   or is terminated.
  * @property exitPolicy whether non-zero exits are returned or thrown.
  */
 data class ExecSpec(
@@ -149,18 +142,12 @@ data class ExecSpec(
     val cleanupTimeout: Duration = defaultCleanupTimeout,
     val exitPolicy: ExitPolicy = defaultExitPolicy,
 ) {
-    /**
-     * Stdin source for managed execution.
-     */
+    /** Stdin source for managed execution. */
     sealed interface Input {
-        /**
-         * Close child stdin immediately.
-         */
+        /** Close child stdin immediately. */
         data object None : Input
 
-        /**
-         * Inherit stdin from the parent process.
-         */
+        /** Inherit stdin from the parent process. */
         data object Inherit : Input
 
         /**
@@ -176,10 +163,7 @@ data class ExecSpec(
          * @property text complete text stdin payload.
          * @property encoding text encoding used to produce bytes.
          */
-        data class Text(
-            val text: String,
-            val encoding: TextEncoding = TextEncoding.Utf8,
-        ) : Input
+        data class Text(val text: String, val encoding: TextEncoding = TextEncoding.Utf8) : Input
 
         /**
          * Open a [Source], copy it to child stdin, and close both streams.
@@ -209,39 +193,25 @@ data class ExecSpec(
         data class FromPath(val path: Path) : Input
     }
 
-    /**
-     * Behavior when process output exceeds a configured byte limit.
-     */
+    /** Behavior when process output exceeds a configured byte limit. */
     enum class OverflowPolicy {
-        /**
-         * Keep reading process output but stop retaining or delivering bytes past the limit.
-         */
+        /** Keep reading process output but stop retaining or delivering bytes past the limit. */
         DrainAndTruncate,
 
-        /**
-         * Treat the limit as a hard bound and terminate the process when it is exceeded.
-         */
+        /** Treat the limit as a hard bound and terminate the process when it is exceeded. */
         KillProcess,
     }
 
-    /**
-     * Which portion of captured output is retained when a capture limit is applied.
-     */
+    /** Which portion of captured output is retained when a capture limit is applied. */
     enum class Keep {
-        /**
-         * Retain the first bytes up to the configured limit.
-         */
+        /** Retain the first bytes up to the configured limit. */
         Head,
 
-        /**
-         * Retain the last bytes up to the configured limit.
-         */
+        /** Retain the last bytes up to the configured limit. */
         Tail,
     }
 
-    /**
-     * Destination for a piped stdout or stderr stream.
-     */
+    /** Destination for a piped stdout or stderr stream. */
     sealed interface SinkSpec {
         /**
          * Capture output in memory.
@@ -259,14 +229,14 @@ data class ExecSpec(
         /**
          * Deliver output chunks to [onChunk] as they are read.
          *
-         * The callback receives a reusable buffer unless [copyChunks] is `true`. If [maxBytes] is set,
-         * callbacks stop after the limit and [overflow] decides whether the process is killed or the
-         * remaining output is drained.
+         * The callback receives a reusable buffer unless [copyChunks] is `true`. If [maxBytes] is
+         * set, callbacks stop after the limit and [overflow] decides whether the process is killed
+         * or the remaining output is drained.
          *
          * @property onChunk callback receiving `(buffer, offset, length)`.
          * @property copyChunks copy each delivered chunk before invoking [onChunk].
-         * @property maxBytes optional byte limit for callback delivery. Must be greater than zero when
-         * set.
+         * @property maxBytes optional byte limit for callback delivery. Must be greater than zero
+         *   when set.
          * @property overflow behavior when [maxBytes] is exceeded.
          */
         data class Stream(
@@ -279,8 +249,8 @@ data class ExecSpec(
         /**
          * Open a [Sink] and write output bytes into it.
          *
-         * The sink is opened lazily on first output byte. If [maxBytes] is set, only bytes up to the
-         * limit are written and [overflow] controls what happens after the limit is exceeded.
+         * The sink is opened lazily on first output byte. If [maxBytes] is set, only bytes up to
+         * the limit are written and [overflow] controls what happens after the limit is exceeded.
          *
          * @property open sink factory.
          * @property maxBytes optional maximum bytes written. Must be greater than zero when set.
@@ -300,8 +270,8 @@ data class ExecSpec(
          *
          * @property path output path.
          * @property write append/truncate and eager/lazy opening policy.
-         * @property maxBytes optional maximum bytes written during this run. Must be greater than zero
-         * when set.
+         * @property maxBytes optional maximum bytes written during this run. Must be greater than
+         *   zero when set.
          * @property overflow behavior when [maxBytes] is exceeded.
          */
         data class File(
@@ -314,8 +284,8 @@ data class ExecSpec(
         /**
          * Send the same output stream to multiple sinks.
          *
-         * The [primary] sink determines captured bytes and stats returned in [ExecResult]. [branches]
-         * are side-effect sinks such as streams or files.
+         * The [primary] sink determines captured bytes and stats returned in [ExecResult].
+         * [branches] are side-effect sinks such as streams or files.
          *
          * @property primary sink whose capture is reported.
          * @property branches additional sinks that receive the same chunks.
@@ -323,18 +293,12 @@ data class ExecSpec(
         data class Tee(val primary: SinkSpec, val branches: List<SinkSpec>) : SinkSpec
     }
 
-    /**
-     * Stdout routing for managed execution.
-     */
+    /** Stdout routing for managed execution. */
     sealed interface StdoutSpec {
-        /**
-         * Inherit stdout from the parent process.
-         */
+        /** Inherit stdout from the parent process. */
         data object Inherit : StdoutSpec
 
-        /**
-         * Discard stdout.
-         */
+        /** Discard stdout. */
         data object Discard : StdoutSpec
 
         /**
@@ -345,18 +309,12 @@ data class ExecSpec(
         data class Pipe(val sink: SinkSpec) : StdoutSpec
     }
 
-    /**
-     * Stderr routing for managed execution.
-     */
+    /** Stderr routing for managed execution. */
     sealed interface StderrSpec {
-        /**
-         * Inherit stderr from the parent process.
-         */
+        /** Inherit stderr from the parent process. */
         data object Inherit : StderrSpec
 
-        /**
-         * Discard stderr.
-         */
+        /** Discard stderr. */
         data object Discard : StderrSpec
 
         /**
@@ -366,46 +324,32 @@ data class ExecSpec(
          */
         data class Pipe(val sink: SinkSpec) : StderrSpec
 
-        /**
-         * Merge stderr into stdout using the platform process launcher.
-         */
+        /** Merge stderr into stdout using the platform process launcher. */
         data object ToStdout : StderrSpec
     }
 
     companion object {
-        /**
-         * Default environment policy: inherit parent environment without changes.
-         */
+        /** Default environment policy: inherit parent environment without changes. */
         val defaultEnvPolicy = EnvPolicy.Inherit()
 
-        /**
-         * Default stdin: close child stdin immediately.
-         */
+        /** Default stdin: close child stdin immediately. */
         val defaultStdinSpec = Input.None
 
-        /**
-         * Default stdout: capture the first 4 MiB in memory.
-         */
-        val defaultStdoutSpec = StdoutSpec.Pipe(SinkSpec.Capture(maxBytes = 4 * 1024 * 1024, keep = Keep.Head))
+        /** Default stdout: capture the first 4 MiB in memory. */
+        val defaultStdoutSpec =
+            StdoutSpec.Pipe(SinkSpec.Capture(maxBytes = 4 * 1024 * 1024, keep = Keep.Head))
 
-        /**
-         * Default stderr: capture the last 256 KiB in memory.
-         */
-        val defaultStderrSpec = StderrSpec.Pipe(SinkSpec.Capture(maxBytes = 256 * 1024, keep = Keep.Tail))
+        /** Default stderr: capture the last 256 KiB in memory. */
+        val defaultStderrSpec =
+            StderrSpec.Pipe(SinkSpec.Capture(maxBytes = 256 * 1024, keep = Keep.Tail))
 
-        /**
-         * Default shutdown: graceful termination followed by force kill after 500 milliseconds.
-         */
+        /** Default shutdown: graceful termination followed by force kill after 500 milliseconds. */
         val defaultShutdownPolicy = ShutdownPolicy.TerminateThenKillTree()
 
-        /**
-         * Default cleanup budget for joining I/O tasks and finalizing sinks.
-         */
+        /** Default cleanup budget for joining I/O tasks and finalizing sinks. */
         val defaultCleanupTimeout: Duration = 2.seconds
 
-        /**
-         * Default exit handling: return [ExecResult] even for non-zero exits.
-         */
+        /** Default exit handling: return [ExecResult] even for non-zero exits. */
         val defaultExitPolicy = ExitPolicy.Return
 
         /**
@@ -443,8 +387,10 @@ data class ExecSpec(
                 cwd = cwd,
                 env = env,
                 stdin = stdin,
-                stdout = StdoutSpec.Pipe(SinkSpec.Capture(maxBytes = stdoutMaxBytes, keep = Keep.Head)),
-                stderr = StderrSpec.Pipe(SinkSpec.Capture(maxBytes = stderrTailBytes, keep = Keep.Tail)),
+                stdout =
+                    StdoutSpec.Pipe(SinkSpec.Capture(maxBytes = stdoutMaxBytes, keep = Keep.Head)),
+                stderr =
+                    StderrSpec.Pipe(SinkSpec.Capture(maxBytes = stderrTailBytes, keep = Keep.Tail)),
                 timeout = timeout,
                 shutdown = shutdown,
                 cleanupTimeout = cleanupTimeout,
@@ -483,10 +429,7 @@ data class ExecResult(
      * @property argv command and arguments used for the run.
      * @property pid process id when the platform exposes it.
      */
-    data class Meta(
-        val argv: List<String>,
-        val pid: Long? = null,
-    )
+    data class Meta(val argv: List<String>, val pid: Long? = null)
 
     /**
      * In-memory captured output.
@@ -495,11 +438,7 @@ data class ExecResult(
      * @property truncated `true` when not all bytes read from the process are present in [bytes].
      * @property bytesRead total bytes read from the process stream.
      */
-    data class Captured(
-        val bytes: ByteArray,
-        val truncated: Boolean,
-        val bytesRead: Long,
-    ) {
+    data class Captured(val bytes: ByteArray, val truncated: Boolean, val bytesRead: Long) {
         /**
          * Decode captured bytes to text.
          *
@@ -522,10 +461,7 @@ data class ExecResult(
      * @property bytesRead total bytes read from the process stream.
      * @property truncated `true` when the configured sink stopped retaining or delivering bytes.
      */
-    data class OutputStats(
-        val bytesRead: Long,
-        val truncated: Boolean,
-    )
+    data class OutputStats(val bytesRead: Long, val truncated: Boolean)
 
     /**
      * Captures and stats attached to an [ExecError].
@@ -542,10 +478,9 @@ data class ExecResult(
         val stderrStats: OutputStats? = stderr?.let { OutputStats(it.bytesRead, it.truncated) },
     )
 
-    /**
-     * Whether [exitCode] is zero.
-     */
-    val ok: Boolean get() = exitCode.value == 0
+    /** Whether [exitCode] is zero. */
+    val ok: Boolean
+        get() = exitCode.value == 0
 
     /**
      * Return this result when [ok], or throw [ExecException] with [ExecError.ExitNonZero].
@@ -564,18 +499,12 @@ data class ExecResult(
                 stderrStats = stderrStats,
             )
         throw ExecException(
-            ExecError.ExitNonZero(
-                meta = meta,
-                exitCode = exitCode.value,
-                captures = c,
-            )
+            ExecError.ExitNonZero(meta = meta, exitCode = exitCode.value, captures = c)
         )
     }
 }
 
-/**
- * Non-throwing representation of a managed execution attempt.
- */
+/** Non-throwing representation of a managed execution attempt. */
 sealed interface ExecOutcome {
     /**
      * Process execution completed and produced [result].
@@ -618,33 +547,21 @@ data class SpawnSpec(
     val stderr: StderrSpec = StderrSpec.Discard,
     val shutdown: ShutdownPolicy = ShutdownPolicy.TerminateThenKillTree(500.milliseconds),
 ) {
-    /**
-     * Stdin behavior for spawned processes.
-     */
+    /** Stdin behavior for spawned processes. */
     sealed interface Input {
-        /**
-         * Close child stdin immediately.
-         */
+        /** Close child stdin immediately. */
         data object None : Input
 
-        /**
-         * Inherit stdin from the parent process.
-         */
+        /** Inherit stdin from the parent process. */
         data object Inherit : Input
     }
 
-    /**
-     * Stdout routing for spawned processes.
-     */
+    /** Stdout routing for spawned processes. */
     sealed interface StdoutSpec {
-        /**
-         * Inherit stdout from the parent process.
-         */
+        /** Inherit stdout from the parent process. */
         data object Inherit : StdoutSpec
 
-        /**
-         * Discard stdout.
-         */
+        /** Discard stdout. */
         data object Discard : StdoutSpec
 
         /**
@@ -656,18 +573,12 @@ data class SpawnSpec(
         data class File(val path: Path, val append: Boolean = false) : StdoutSpec
     }
 
-    /**
-     * Stderr routing for spawned processes.
-     */
+    /** Stderr routing for spawned processes. */
     sealed interface StderrSpec {
-        /**
-         * Inherit stderr from the parent process.
-         */
+        /** Inherit stderr from the parent process. */
         data object Inherit : StderrSpec
 
-        /**
-         * Discard stderr.
-         */
+        /** Discard stderr. */
         data object Discard : StderrSpec
 
         /**
@@ -678,16 +589,12 @@ data class SpawnSpec(
          */
         data class File(val path: Path, val append: Boolean = false) : StderrSpec
 
-        /**
-         * Merge stderr into stdout using the platform process launcher.
-         */
+        /** Merge stderr into stdout using the platform process launcher. */
         data object ToStdout : StderrSpec
     }
 }
 
-/**
- * Result of waiting for a [RunningProcess].
- */
+/** Result of waiting for a [RunningProcess]. */
 sealed interface AwaitExitOutcome {
     /**
      * The process exited with [code].
@@ -696,14 +603,10 @@ sealed interface AwaitExitOutcome {
      */
     data class Exited(val code: ExitCode) : AwaitExitOutcome
 
-    /**
-     * The wait timeout elapsed and the process may still be running.
-     */
+    /** The wait timeout elapsed and the process may still be running. */
     data object TimedOut : AwaitExitOutcome
 
-    /**
-     * A blocking wait was interrupted and the process may still be running.
-     */
+    /** A blocking wait was interrupted and the process may still be running. */
     data object Interrupted : AwaitExitOutcome
 }
 
@@ -714,19 +617,13 @@ sealed interface AwaitExitOutcome {
  * [killTree] explicitly when the caller wants to terminate the process tree.
  */
 interface RunningProcess {
-    /**
-     * Platform process id when available.
-     */
+    /** Platform process id when available. */
     val pid: Long?
 
-    /**
-     * Return whether the process is currently alive.
-     */
+    /** Return whether the process is currently alive. */
     fun isAlive(): Boolean
 
-    /**
-     * Return the exit code when the process has exited, or `null` while it is still running.
-     */
+    /** Return the exit code when the process has exited, or `null` while it is still running. */
     fun exitCodeOrNull(): ExitCode?
 
     /**

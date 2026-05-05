@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 @file:OptIn(PlatformSpecificExecApi::class)
 
 package one.wabbit.exec
@@ -7,7 +9,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import kotlinx.io.Sink as KxSink
-import kotlinx.io.asOutputStream
 import kotlinx.io.write
 import one.wabbit.throwables.Throwables
 
@@ -19,7 +20,9 @@ internal data class SinkFinished(
 
 internal sealed interface Sink {
     fun offer(buf: ByteArray, off: Int, len: Int): ExecError?
+
     fun finish(): SinkFinished
+
     fun close() {}
 }
 
@@ -35,11 +38,13 @@ internal fun sinkFor(spec: JvmExecSpec.SinkSpec, meta: ExecResult.Meta, stream: 
             StreamSink(meta, stream, spec.onChunk, spec.copyChunks, spec.maxBytes, spec.overflow)
         is JvmExecSpec.SinkSpec.WriteTo ->
             WriteToSink(meta, stream, spec.open, spec.maxBytes, spec.overflow)
-        is JvmExecSpec.SinkSpec.File -> FileSink(meta, stream, spec.path, spec.write, spec.maxBytes, spec.overflow)
-        is JvmExecSpec.SinkSpec.Tee -> TeeSink(
-            primary = sinkFor(spec.primary, meta, stream),
-            branches = spec.branches.map { sinkFor(it, meta, stream) }
-        )
+        is JvmExecSpec.SinkSpec.File ->
+            FileSink(meta, stream, spec.path, spec.write, spec.maxBytes, spec.overflow)
+        is JvmExecSpec.SinkSpec.Tee ->
+            TeeSink(
+                primary = sinkFor(spec.primary, meta, stream),
+                branches = spec.branches.map { sinkFor(it, meta, stream) },
+            )
     }
 
 /** Keep first N bytes. */
@@ -59,7 +64,11 @@ internal class HeadCaptureSink(
         val written = out.write(buf, off, len)
         if (written < len) truncated = true
 
-        if (!overflowSignaled && overflow == ExecSpec.OverflowPolicy.KillProcess && bytesRead > maxBytes.toLong()) {
+        if (
+            !overflowSignaled &&
+                overflow == ExecSpec.OverflowPolicy.KillProcess &&
+                bytesRead > maxBytes.toLong()
+        ) {
             overflowSignaled = true
             return ExecError.OutputLimitExceeded(
                 meta = meta,
@@ -72,10 +81,15 @@ internal class HeadCaptureSink(
     }
 
     override fun finish(): SinkFinished {
-        val cap = ExecResult.Captured(bytes = out.toByteArray(), truncated = truncated, bytesRead = bytesRead)
+        val cap =
+            ExecResult.Captured(
+                bytes = out.toByteArray(),
+                truncated = truncated,
+                bytesRead = bytesRead,
+            )
         return SinkFinished(
             captured = cap,
-            stats = ExecResult.OutputStats(bytesRead = bytesRead, truncated = truncated)
+            stats = ExecResult.OutputStats(bytesRead = bytesRead, truncated = truncated),
         )
     }
 }
@@ -95,7 +109,11 @@ internal class TailCaptureSink(
         bytesRead += len.toLong()
         ring.write(buf, off, len)
 
-        if (!overflowSignaled && overflow == ExecSpec.OverflowPolicy.KillProcess && bytesRead > maxBytes.toLong()) {
+        if (
+            !overflowSignaled &&
+                overflow == ExecSpec.OverflowPolicy.KillProcess &&
+                bytesRead > maxBytes.toLong()
+        ) {
             overflowSignaled = true
             return ExecError.OutputLimitExceeded(
                 meta = meta,
@@ -109,10 +127,15 @@ internal class TailCaptureSink(
 
     override fun finish(): SinkFinished {
         val truncated = bytesRead > maxBytes.toLong()
-        val cap = ExecResult.Captured(bytes = ring.toByteArray(), truncated = truncated, bytesRead = bytesRead)
+        val cap =
+            ExecResult.Captured(
+                bytes = ring.toByteArray(),
+                truncated = truncated,
+                bytesRead = bytesRead,
+            )
         return SinkFinished(
             captured = cap,
-            stats = ExecResult.OutputStats(bytesRead = bytesRead, truncated = truncated)
+            stats = ExecResult.OutputStats(bytesRead = bytesRead, truncated = truncated),
         )
     }
 }
@@ -149,9 +172,18 @@ internal class StreamSink(
         if (allowed <= 0) {
             truncated = true
             callbackEnabled = false
-            if (overflow == ExecSpec.OverflowPolicy.KillProcess && !overflowSignaled && bytesRead > limit) {
+            if (
+                overflow == ExecSpec.OverflowPolicy.KillProcess &&
+                    !overflowSignaled &&
+                    bytesRead > limit
+            ) {
                 overflowSignaled = true
-                return ExecError.OutputLimitExceeded(meta = meta, stream = stream, limitBytes = maxBytes, observedBytes = bytesRead)
+                return ExecError.OutputLimitExceeded(
+                    meta = meta,
+                    stream = stream,
+                    limitBytes = maxBytes,
+                    observedBytes = bytesRead,
+                )
             }
             return null
         }
@@ -166,7 +198,11 @@ internal class StreamSink(
         tryDeliver(buf, off, deliver)
 
         // If we exceeded and policy is KillProcess, signal now (after delivering allowed bytes).
-        if (overflow == ExecSpec.OverflowPolicy.KillProcess && !overflowSignaled && bytesRead > limit) {
+        if (
+            overflow == ExecSpec.OverflowPolicy.KillProcess &&
+                !overflowSignaled &&
+                bytesRead > limit
+        ) {
             overflowSignaled = true
             return ExecError.OutputLimitExceeded(
                 meta = meta,
@@ -201,7 +237,7 @@ internal class StreamSink(
         // Streaming mode does not retain bytes (by design).
         return SinkFinished(
             captured = null,
-            stats = ExecResult.OutputStats(bytesRead = bytesRead, truncated = truncated)
+            stats = ExecResult.OutputStats(bytesRead = bytesRead, truncated = truncated),
         )
     }
 }
@@ -232,7 +268,11 @@ internal class WriteToSink(
 
         if (maxBytes != null && bytesWritten >= maxBytes.toLong()) {
             truncated = true
-            if (!overflowSignaled && overflow == ExecSpec.OverflowPolicy.KillProcess && bytesRead > maxBytes.toLong()) {
+            if (
+                !overflowSignaled &&
+                    overflow == ExecSpec.OverflowPolicy.KillProcess &&
+                    bytesRead > maxBytes.toLong()
+            ) {
                 overflowSignaled = true
                 return ExecError.OutputLimitExceeded(
                     meta = meta,
@@ -259,7 +299,12 @@ internal class WriteToSink(
             }
             if (toWrite < len) truncated = true
 
-            if (maxBytes != null && !overflowSignaled && overflow == ExecSpec.OverflowPolicy.KillProcess && bytesRead > maxBytes.toLong()) {
+            if (
+                maxBytes != null &&
+                    !overflowSignaled &&
+                    overflow == ExecSpec.OverflowPolicy.KillProcess &&
+                    bytesRead > maxBytes.toLong()
+            ) {
                 overflowSignaled = true
                 return ExecError.OutputLimitExceeded(
                     meta = meta,
@@ -279,10 +324,11 @@ internal class WriteToSink(
         val closeErr = closeForFinish()
         return SinkFinished(
             captured = null,
-            stats = ExecResult.OutputStats(
-                bytesRead = bytesRead,
-                truncated = truncated || (maxBytes != null && bytesRead > maxBytes.toLong()),
-            ),
+            stats =
+                ExecResult.OutputStats(
+                    bytesRead = bytesRead,
+                    truncated = truncated || (maxBytes != null && bytesRead > maxBytes.toLong()),
+                ),
             error = closeErr,
         )
     }
@@ -385,7 +431,11 @@ internal class FileSink(
         if (maxBytes != null) {
             if (bytesWritten >= maxBytes.toLong()) {
                 truncated = true
-                if (!overflowSignaled && overflow == ExecSpec.OverflowPolicy.KillProcess && bytesRead > maxBytes.toLong()) {
+                if (
+                    !overflowSignaled &&
+                        overflow == ExecSpec.OverflowPolicy.KillProcess &&
+                        bytesRead > maxBytes.toLong()
+                ) {
                     overflowSignaled = true
                     return ExecError.OutputLimitExceeded(
                         meta = meta,
@@ -414,7 +464,12 @@ internal class FileSink(
             }
             if (toWrite < len) truncated = true
 
-            if (maxBytes != null && !overflowSignaled && overflow == ExecSpec.OverflowPolicy.KillProcess && bytesRead > maxBytes.toLong()) {
+            if (
+                maxBytes != null &&
+                    !overflowSignaled &&
+                    overflow == ExecSpec.OverflowPolicy.KillProcess &&
+                    bytesRead > maxBytes.toLong()
+            ) {
                 overflowSignaled = true
                 return ExecError.OutputLimitExceeded(
                     meta = meta,
@@ -434,10 +489,11 @@ internal class FileSink(
         val closeErr = closeForFinish()
         return SinkFinished(
             captured = null,
-            stats = ExecResult.OutputStats(
-                bytesRead = bytesRead,
-                truncated = truncated || (maxBytes != null && bytesRead > maxBytes.toLong())
-            ),
+            stats =
+                ExecResult.OutputStats(
+                    bytesRead = bytesRead,
+                    truncated = truncated || (maxBytes != null && bytesRead > maxBytes.toLong()),
+                ),
             error = closeErr,
         )
     }
@@ -470,11 +526,15 @@ internal class FileSink(
         val current = os
         os = null
         if (current != null) {
-            try { current.flush() } catch (t: Throwable) {
+            try {
+                current.flush()
+            } catch (t: Throwable) {
                 restoreInterruptFlagIfNeeded(t)
                 Throwables.propagateFatalPlatformErrorsIfNeeded(t)
             }
-            try { current.close() } catch (t: Throwable) {
+            try {
+                current.close()
+            } catch (t: Throwable) {
                 restoreInterruptFlagIfNeeded(t)
                 Throwables.propagateFatalPlatformErrorsIfNeeded(t)
             }
@@ -482,10 +542,7 @@ internal class FileSink(
     }
 }
 
-internal class TeeSink(
-    private val primary: Sink,
-    private val branches: List<Sink>,
-) : Sink {
+internal class TeeSink(private val primary: Sink, private val branches: List<Sink>) : Sink {
     override fun offer(buf: ByteArray, off: Int, len: Int): ExecError? {
         val p = primary.offer(buf, off, len)
         if (p != null) return p
@@ -507,12 +564,16 @@ internal class TeeSink(
     }
 
     override fun close() {
-        try { primary.close() } catch (t: Throwable) {
+        try {
+            primary.close()
+        } catch (t: Throwable) {
             restoreInterruptFlagIfNeeded(t)
             Throwables.propagateFatalPlatformErrorsIfNeeded(t)
         }
         for (b in branches) {
-            try { b.close() } catch (t: Throwable) {
+            try {
+                b.close()
+            } catch (t: Throwable) {
                 restoreInterruptFlagIfNeeded(t)
                 Throwables.propagateFatalPlatformErrorsIfNeeded(t)
             }
@@ -521,8 +582,8 @@ internal class TeeSink(
 }
 
 /**
- * Bounded head buffer that never allocates more than maxBytes, while still avoiding
- * allocating maxBytes upfront for small outputs.
+ * Bounded head buffer that never allocates more than maxBytes, while still avoiding allocating
+ * maxBytes upfront for small outputs.
  */
 internal class HeadBuffer(private val maxBytes: Int) {
     private var buf: ByteArray = ByteArray(minOf(8192, maxBytes).coerceAtLeast(1))

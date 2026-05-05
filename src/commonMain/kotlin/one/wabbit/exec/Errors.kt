@@ -1,67 +1,43 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 package one.wabbit.exec
 
-/**
- * Execution phase associated with an [ExecError].
- */
+/** Execution phase associated with an [ExecError]. */
 enum class Phase {
-    /**
-     * Building or validating the process configuration failed before spawn.
-     */
+    /** Building or validating the process configuration failed before spawn. */
     ConfigureProcessBuilder,
 
-    /**
-     * Starting the process failed.
-     */
+    /** Starting the process failed. */
     Spawn,
 
-    /**
-     * Providing or writing stdin failed.
-     */
+    /** Providing or writing stdin failed. */
     WriteStdin,
 
-    /**
-     * Reading or consuming stdout failed.
-     */
+    /** Reading or consuming stdout failed. */
     ReadStdout,
 
-    /**
-     * Reading or consuming stderr failed.
-     */
+    /** Reading or consuming stderr failed. */
     ReadStderr,
 
-    /**
-     * Waiting for the process to exit failed or timed out.
-     */
+    /** Waiting for the process to exit failed or timed out. */
     AwaitExit,
 
-    /**
-     * Process-tree termination failed.
-     */
+    /** Process-tree termination failed. */
     KillTree,
 
-    /**
-     * Cleanup after exit or failure failed.
-     */
+    /** Cleanup after exit or failure failed. */
     Cleanup,
 }
 
-/**
- * Identifier for a process stream.
- */
+/** Identifier for a process stream. */
 enum class StreamId {
-    /**
-     * Child standard input.
-     */
+    /** Child standard input. */
     STDIN,
 
-    /**
-     * Child standard output.
-     */
+    /** Child standard output. */
     STDOUT,
 
-    /**
-     * Child standard error.
-     */
+    /** Child standard error. */
     STDERR,
 }
 
@@ -72,29 +48,19 @@ enum class StreamId {
  * underlying [cause], and any [captures] available when the failure was reported.
  */
 sealed interface ExecError {
-    /**
-     * Command metadata available for the failed run.
-     */
+    /** Command metadata available for the failed run. */
     val meta: ExecResult.Meta
 
-    /**
-     * Execution phase where the failure occurred.
-     */
+    /** Execution phase where the failure occurred. */
     val phase: Phase
 
-    /**
-     * Human-readable diagnostic message.
-     */
+    /** Human-readable diagnostic message. */
     val message: String
 
-    /**
-     * Underlying cause, when the failure wraps another exception.
-     */
+    /** Underlying cause, when the failure wraps another exception. */
     val cause: Throwable?
 
-    /**
-     * Captured stdout/stderr available at failure time.
-     */
+    /** Captured stdout/stderr available at failure time. */
     val captures: ExecResult.Captures?
 
     /**
@@ -255,7 +221,8 @@ sealed interface ExecError {
         val stream: StreamId,
         val limitBytes: Int,
         val observedBytes: Long,
-        override val message: String = "$stream exceeded output limit ($observedBytes > $limitBytes bytes)",
+        override val message: String =
+            "$stream exceeded output limit ($observedBytes > $limitBytes bytes)",
         override val captures: ExecResult.Captures? = null,
     ) : ExecError {
         override val phase: Phase =
@@ -363,8 +330,8 @@ sealed interface ExecError {
     }
 
     /**
-     * Process exited with a non-zero status while [ExitPolicy.ThrowOnNonZero] or [ExecResult.requireOk]
-     * requested exception-based handling.
+     * Process exited with a non-zero status while [ExitPolicy.ThrowOnNonZero] or
+     * [ExecResult.requireOk] requested exception-based handling.
      *
      * @property meta command metadata.
      * @property exitCode non-zero process exit code.

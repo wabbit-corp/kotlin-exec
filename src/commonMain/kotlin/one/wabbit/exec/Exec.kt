@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 package one.wabbit.exec
 
+import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.io.files.Path
-import kotlin.time.Duration
 
 /**
  * Cross-platform process execution entry point.
@@ -23,13 +25,10 @@ expect object Exec {
      * @param ioDispatcher dispatcher used for blocking process and I/O work.
      * @return completed process result.
      * @throws ExecException for spawn, I/O, timeout, cancellation cleanup, output-limit, and
-     * non-zero-exit failures when requested by [ExecSpec.exitPolicy].
+     *   non-zero-exit failures when requested by [ExecSpec.exitPolicy].
      */
     @Throws(ExecException::class)
-    suspend fun exec(
-        spec: ExecSpec,
-        ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    ): ExecResult
+    suspend fun exec(spec: ExecSpec, ioDispatcher: CoroutineDispatcher = Dispatchers.IO): ExecResult
 
     /**
      * Run [spec] as a managed process and block the current thread.
@@ -38,8 +37,7 @@ expect object Exec {
      * @return completed process result.
      * @throws ExecException for structured execution failures.
      */
-    @Throws(ExecException::class)
-    fun execBlocking(spec: ExecSpec): ExecResult
+    @Throws(ExecException::class) fun execBlocking(spec: ExecSpec): ExecResult
 
     /**
      * Spawn a process and return a handle without waiting for completion.
@@ -65,11 +63,11 @@ expect object Exec {
      * @return running process handle.
      * @throws ExecException when process configuration or startup fails.
      */
-    @Throws(ExecException::class)
-    fun spawnBlocking(spec: SpawnSpec): RunningProcess
+    @Throws(ExecException::class) fun spawnBlocking(spec: SpawnSpec): RunningProcess
 
     /**
-     * Convenience overload for managed coroutine execution without manually constructing [ExecSpec].
+     * Convenience overload for managed coroutine execution without manually constructing
+     * [ExecSpec].
      *
      * @param argv command and arguments.
      * @param cwd optional working directory.
