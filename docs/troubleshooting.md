@@ -30,7 +30,8 @@ Check the selected `EnvPolicy`.
 
 `EnvPolicy.ClearAndSet` uses exactly the supplied map. If the command relies on `PATH`, provide it
 explicitly or use `EnvPolicy.Hermetic`, which installs a minimal launch environment before applying
-your variables.
+your variables. See the Environment Policies section of the user guide for the exact Unix and
+Windows variables supplied by `EnvPolicy.Hermetic`.
 
 ## Output Is Truncated
 

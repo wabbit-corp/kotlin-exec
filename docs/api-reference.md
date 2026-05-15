@@ -18,6 +18,9 @@ This page documents the public surface and the behavioral contracts that matter 
 - `Exec.exec(...)` and `Exec.execBlocking(...)`: convenience overloads for building `ExecSpec`.
 - `Exec.execOutcome(spec)` and `Exec.execBlockingOutcome(spec)`: convert `ExecException` into
   `ExecOutcome.Failure`.
+- `ExecOutcome.Success`: successful managed execution result.
+- `ExecOutcome.Failure`: structured managed execution failure containing `ExecError`, without
+  throwing.
 
 Managed execution owns the process lifecycle. Spawned execution returns ownership to the caller.
 
@@ -38,6 +41,25 @@ Managed execution owns the process lifecycle. Spawned execution returns ownershi
 
 `ExecSpec.tooling` builds a bounded capture spec intended for compilers, CLIs, and build tools.
 
+The raw constructor defaults to stdout head capture up to 4 MiB and stderr tail capture up to 256
+KiB. `ExecSpec.tooling` keeps stdout head capture at 4 MiB and increases stderr tail capture to 1
+MiB.
+
+`ExitPolicy` controls non-zero exits:
+
+- `ExitPolicy.Return`: return an `ExecResult` with `ok == false`.
+- `ExitPolicy.ThrowOnNonZero`: throw `ExecException` with `ExecError.ExitNonZero`.
+
+`ShutdownPolicy` controls destructive cleanup after managed timeout, cancellation, or output-limit
+failure:
+
+- `ShutdownPolicy.TerminateThenKillTree(grace)`: request graceful termination, wait for `grace`, then
+  force-kill the process tree. This is the default with a 500 millisecond grace period.
+- `ShutdownPolicy.KillTree`: force-kill the process tree immediately.
+
+`cleanupTimeout` should exceed the configured `TerminateThenKillTree` grace period so the runner has
+time to finish termination cleanup and output-drain work.
+
 ## Input
 
 Managed stdin variants:
@@ -55,13 +77,20 @@ Managed stdin variants:
 Managed output sinks:
 
 - `SinkSpec.Capture`: retain a bounded head or tail in memory.
-- `SinkSpec.Stream`: invoke a callback for chunks as they are read.
+- `SinkSpec.Stream`: invoke a callback for chunks as they are read. Set `copyChunks = true` when the
+  callback retains the buffer after returning.
 - `SinkSpec.WriteTo`: write to a caller-supplied `kotlinx.io.Sink`.
 - `SinkSpec.File`: write to a filesystem path.
-- `SinkSpec.Tee`: duplicate output to a primary sink and branches.
+- `SinkSpec.Tee`: duplicate output to a primary sink and branches. The primary sink controls the
+  capture attached to `ExecResult`; branch sink or callback failures are reported as execution
+  failures.
 
 `OverflowPolicy.DrainAndTruncate` keeps the process running while discarding output past the limit.
 `OverflowPolicy.KillProcess` reports `ExecError.OutputLimitExceeded` and terminates the process.
+
+`ExecResult.stdout` and `ExecResult.stderr` are non-null only for streams routed through
+`SinkSpec.Capture` or a `SinkSpec.Tee` whose primary sink captures. Streaming, file, inherited, and
+discarded streams report stats when pumped but do not retain bytes.
 
 ## Results
 
@@ -109,6 +138,27 @@ Each error includes `meta`, `phase`, `message`, optional `cause`, and optional c
 - `stderr`
 - `shutdown`
 
+Spawn stdin variants:
+
+- `SpawnSpec.Input.None`
+- `SpawnSpec.Input.Inherit`
+
+Spawn stdin intentionally does not support piped, streaming, or in-memory payloads. Use managed
+execution when `kotlin-exec` should write stdin.
+
+Spawn stdout variants:
+
+- `SpawnSpec.StdoutSpec.Inherit`
+- `SpawnSpec.StdoutSpec.Discard`
+- `SpawnSpec.StdoutSpec.File`
+
+Spawn stderr variants:
+
+- `SpawnSpec.StderrSpec.Inherit`
+- `SpawnSpec.StderrSpec.Discard`
+- `SpawnSpec.StderrSpec.File`
+- `SpawnSpec.StderrSpec.ToStdout`
+
 `RunningProcess` exposes:
 
 - `pid`
@@ -121,6 +171,13 @@ Each error includes `meta`, `phase`, `message`, optional `cause`, and optional c
 - `awaitExit(timeout)`
 
 Spawn wait timeouts do not kill the child.
+
+`AwaitExitOutcome` variants:
+
+- `AwaitExitOutcome.Exited`: the process exited and includes an `ExitCode`.
+- `AwaitExitOutcome.TimedOut`: the wait timeout elapsed and the process may still be running.
+- `AwaitExitOutcome.Interrupted`: a blocking wait was interrupted and the process may still be
+  running.
 
 ## Encoding
 
@@ -148,3 +205,6 @@ JVM-only declarations are marked with `@PlatformSpecificExecApi`:
 
 `execInternal(spec, ioDispatcher)` remains public for historical compatibility but is an opt-in
 low-level JVM execution engine. Prefer `Exec.exec`.
+
+Use `JvmRunningProcess.rawProcess` only when integration code needs a JVM API that is intentionally
+not part of the portable `RunningProcess` contract.

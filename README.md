@@ -80,6 +80,10 @@ println(result.stdout?.text())
 If a managed run times out, is cancelled, exceeds a hard output limit, or fails during I/O, the
 library terminates the process tree according to the configured `ShutdownPolicy`.
 
+Use `Exec.execOutcome` or `Exec.execBlockingOutcome` when a call site wants an explicit
+`ExecOutcome.Success` or `ExecOutcome.Failure` value instead of catching `ExecException` for ordinary
+execution failures.
+
 ## Output Capture
 
 The raw `ExecSpec` constructor defaults capture:
@@ -110,6 +114,9 @@ val spec = ExecSpec(
     )
 )
 ```
+
+`SinkSpec.WriteTo` streams output into a caller-supplied `kotlinx.io.Sink`. Use it when the receiving
+side already owns the sink lifecycle and should not be represented as a file path.
 
 Capture limits are byte limits. With `DrainAndTruncate`, `kotlin-exec` keeps reading output but stops
 retaining bytes past the limit. With `KillProcess`, exceeding the limit terminates the process and
@@ -165,11 +172,16 @@ Prefer the portable common model unless the JVM-specific feature is required.
 - [API reference notes](docs/api-reference.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Development](docs/development.md)
-- [Non-destructive timeout design gap](TRY_REMOTE_ISSUE.md)
-- [Native launcher design notes](ZIG_EXEC_LAUNCHER.md)
 
 Generated API docs can be built locally with Dokka. See [API reference notes](docs/api-reference.md)
 for the command.
+
+## Design Notes
+
+- [Non-destructive timeout design gap](TRY_REMOTE_ISSUE.md): internal design record for the hybrid
+  case where callers want managed capture but a timeout should leave the process alive.
+- [Native launcher design notes](ZIG_EXEC_LAUNCHER.md): design sketch for a possible native launcher
+  helper; it is not required for the current JVM API.
 
 ## Release Notes
 
